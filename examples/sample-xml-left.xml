@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<catalog>
+  <book id="1">
+    <title>Learning React</title>
+    <author>Alex Banks</author>
+    <year>2020</year>
+    <price>29.99</price>
+  </book>
+  <book id="2">
+    <title>JavaScript: The Good Parts</title>
+    <author>Douglas Crockford</author>
+    <year>2008</year>
+    <price>24.99</price>
+  </book>
+</catalog>
+

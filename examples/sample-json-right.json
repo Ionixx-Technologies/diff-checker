@@ -1,0 +1,15 @@
+{
+  "name": "John Doe",
+  "age": 31,
+  "email": "john.doe@example.com",
+  "address": {
+    "street": "123 Main St",
+    "city": "San Francisco",
+    "state": "CA",
+    "country": "USA"
+  },
+  "skills": ["JavaScript", "React", "Node.js", "TypeScript"],
+  "isActive": true,
+  "phone": "+1-555-0123"
+}
+
