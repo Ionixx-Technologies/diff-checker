@@ -180,6 +180,25 @@ export const Validator: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Maximum file size in bytes (5 MB)
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+
+  /**
+   * Validate file size before processing
+   * Returns true if file is valid, false otherwise
+   */
+  const validateFileSize = useCallback((file: File): boolean => {
+    if (file.size > MAX_FILE_SIZE) {
+      const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+      alert(
+        `File size (${fileSizeMB} MB) exceeds the maximum allowed size of 5 MB.\n\n` +
+        `Please select a smaller file.`
+      );
+      return false;
+    }
+    return true;
+  }, [MAX_FILE_SIZE]);
+
   /**
    * Handle validation
    */
@@ -301,6 +320,11 @@ export const Validator: React.FC = () => {
         return;
       }
 
+      // Validate file size before reading
+      if (!validateFileSize(file)) {
+        return;
+      }
+
       // Read file content
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -328,7 +352,7 @@ export const Validator: React.FC = () => {
       };
       reader.readAsText(file);
     }
-  }, []);
+  }, [validateFileSize]);
 
   /**
    * Handle file upload via input element
@@ -336,6 +360,13 @@ export const Validator: React.FC = () => {
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      // Validate file size before reading
+      if (!validateFileSize(file)) {
+        // Reset input to allow re-selection
+        event.target.value = '';
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
@@ -362,7 +393,9 @@ export const Validator: React.FC = () => {
       };
       reader.readAsText(file);
     }
-  }, []);
+    // Reset input value to allow re-uploading the same file
+    event.target.value = '';
+  }, [validateFileSize]);
 
   /**
    * Handle paste from clipboard
@@ -520,7 +553,10 @@ export const Validator: React.FC = () => {
           />
           {isDragging && (
             <S.DropOverlay>
-              <S.DropMessage>📂 Drop {validationType} file here</S.DropMessage>
+              <S.DropMessage>
+                📂 Drop {validationType} file here
+                <S.FileSizeHint>(Max 5 MB)</S.FileSizeHint>
+              </S.DropMessage>
             </S.DropOverlay>
           )}
         </S.DropZone>

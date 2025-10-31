@@ -48,6 +48,25 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
   const [leftDragging, setLeftDragging] = useState(false);
   const [rightDragging, setRightDragging] = useState(false);
 
+  // Maximum file size in bytes (5 MB)
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+
+  /**
+   * Validate file size before processing
+   * Returns true if file is valid, false otherwise
+   */
+  const validateFileSize = useCallback((file: File): boolean => {
+    if (file.size > MAX_FILE_SIZE) {
+      const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+      alert(
+        `File size (${fileSizeMB} MB) exceeds the maximum allowed size of 5 MB.\n\n` +
+        `Please select a smaller file.`
+      );
+      return false;
+    }
+    return true;
+  }, [MAX_FILE_SIZE]);
+
   /**
    * Generic file reader utility
    * Reads file content and calls the provided callback
@@ -70,9 +89,14 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
   const handleLeftFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      readFile(file, setLeftInput);
+      // Validate file size before reading
+      if (validateFileSize(file)) {
+        readFile(file, setLeftInput);
+      }
     }
-  }, [readFile, setLeftInput]);
+    // Reset input value to allow re-uploading the same file
+    event.target.value = '';
+  }, [readFile, setLeftInput, validateFileSize]);
 
   /**
    * Handle file upload for right input via input element
@@ -80,9 +104,14 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
   const handleRightFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      readFile(file, setRightInput);
+      // Validate file size before reading
+      if (validateFileSize(file)) {
+        readFile(file, setRightInput);
+      }
     }
-  }, [readFile, setRightInput]);
+    // Reset input value to allow re-uploading the same file
+    event.target.value = '';
+  }, [readFile, setRightInput, validateFileSize]);
 
   /**
    * Handle drag over event - prevents default to allow drop
@@ -148,14 +177,20 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
         'text/html',
       ];
       
-      if (validTypes.includes(file.type) || file.name.endsWith('.txt') || 
-          file.name.endsWith('.json') || file.name.endsWith('.xml')) {
-        readFile(file, side === 'left' ? setLeftInput : setRightInput);
-      } else {
+      if (!validTypes.includes(file.type) && 
+          !file.name.endsWith('.txt') && 
+          !file.name.endsWith('.json') && 
+          !file.name.endsWith('.xml')) {
         alert('Please drop a text-based file (.txt, .json, .xml)');
+        return;
+      }
+
+      // Validate file size before reading
+      if (validateFileSize(file)) {
+        readFile(file, side === 'left' ? setLeftInput : setRightInput);
       }
     }
-  }, [readFile, setLeftInput, setRightInput]);
+  }, [readFile, setLeftInput, setRightInput, validateFileSize]);
 
   /**
    * Handle paste from clipboard
@@ -195,6 +230,23 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
   const stats = getStats();
 
   /**
+   * Handle unified format change - updates both left and right formats
+   * Disables ignoreKeyOrder if format is not JSON
+   */
+  const handleUnifiedFormatChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newFormat = e.target.value as FormatType;
+    
+    // If changing away from JSON, disable ignoreKeyOrder option
+    if (newFormat !== 'json' && diffOptions.ignoreKeyOrder) {
+      setDiffOptions({ ignoreKeyOrder: false });
+    }
+    
+    // Update both formats simultaneously
+    setLeftFormat(newFormat);
+    setRightFormat(newFormat);
+  }, [diffOptions.ignoreKeyOrder, setDiffOptions, setLeftFormat, setRightFormat]);
+
+  /**
    * Handle comparison option changes
    * Automatically re-compare if diff result exists
    */
@@ -219,8 +271,22 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
         )}
       </S.Header>
 
-      {/* Control bar with action buttons */}
+      {/* Control bar with action buttons and unified format selector */}
       <S.ControlBar>
+        <S.FormatGroup role="group" aria-label="Format selection">
+          <S.FormatLabel htmlFor="unified-format-select">Format:</S.FormatLabel>
+          <S.Select
+            id="unified-format-select"
+            value={leftFormat}
+            onChange={handleUnifiedFormatChange}
+            aria-label="Select format for both inputs"
+          >
+            <option value="text">Plain Text</option>
+            <option value="json">JSON</option>
+            <option value="xml">XML</option>
+          </S.Select>
+        </S.FormatGroup>
+
         <S.Button 
           variant="primary" 
           onClick={compare} 
@@ -303,15 +369,7 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
         <S.InputPanel>
           <S.PanelHeader>
             <S.PanelTitle>Original (Left)</S.PanelTitle>
-            <S.Select
-              value={leftFormat}
-              onChange={(e) => setLeftFormat(e.target.value as FormatType)}
-              aria-label="Select format for left input"
-            >
-              <option value="text">Plain Text</option>
-              <option value="json">JSON</option>
-              <option value="xml">XML</option>
-            </S.Select>
+            <S.FormatBadge>{leftFormat.toUpperCase()}</S.FormatBadge>
           </S.PanelHeader>
 
           {/* Input mode controls */}
@@ -347,7 +405,10 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
             />
             {leftDragging && (
               <S.DropOverlay>
-                <S.DropMessage>📂 Drop file here</S.DropMessage>
+                <S.DropMessage>
+                  📂 Drop file here
+                  <S.FileSizeHint>(Max 5 MB)</S.FileSizeHint>
+                </S.DropMessage>
               </S.DropOverlay>
             )}
           </S.DropZone>
@@ -369,15 +430,7 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
         <S.InputPanel>
           <S.PanelHeader>
             <S.PanelTitle>Modified (Right)</S.PanelTitle>
-            <S.Select
-              value={rightFormat}
-              onChange={(e) => setRightFormat(e.target.value as FormatType)}
-              aria-label="Select format for right input"
-            >
-              <option value="text">Plain Text</option>
-              <option value="json">JSON</option>
-              <option value="xml">XML</option>
-            </S.Select>
+            <S.FormatBadge>{rightFormat.toUpperCase()}</S.FormatBadge>
           </S.PanelHeader>
 
           {/* Input mode controls */}
@@ -413,7 +466,10 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
             />
             {rightDragging && (
               <S.DropOverlay>
-                <S.DropMessage>📂 Drop file here</S.DropMessage>
+                <S.DropMessage>
+                  📂 Drop file here
+                  <S.FileSizeHint>(Max 5 MB)</S.FileSizeHint>
+                </S.DropMessage>
               </S.DropOverlay>
             )}
           </S.DropZone>
@@ -431,14 +487,6 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
           )}
         </S.InputPanel>
       </S.InputContainer>
-
-      {/* Format mismatch warning */}
-      {leftFormat !== rightFormat && (leftInput || rightInput) && (
-        <S.ValidationMessage type="warning" role="alert">
-          ⚠️ Warning: Format mismatch detected. Left is {leftFormat.toUpperCase()}, Right is {rightFormat.toUpperCase()}. 
-          Please select the same format for both sides to compare.
-        </S.ValidationMessage>
-      )}
 
       {/* Diff statistics panel */}
       {stats && diffResult && (

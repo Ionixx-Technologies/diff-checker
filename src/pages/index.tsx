@@ -25,54 +25,90 @@ import { lightTheme, darkTheme } from '@/theme';
 // Type definition for theme mode
 type ThemeMode = 'light' | 'dark';
 
-// Styled components for the main page layout
+// Modern styled components with enhanced visual design
 const PageContainer = styled.div`
   min-height: 100vh;
-  background-color: ${(props) => props.theme.colors.background};
-  transition: background-color 0.3s ease;
+  background: ${(props) => `linear-gradient(135deg, ${props.theme.colors.background} 0%, ${props.theme.colors.cardBackground} 100%)`};
+  font-family: ${(props) => props.theme.fonts.body};
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 `;
 
 const Header = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: ${(props) => props.theme.spacing(4)};
-  border-bottom: 1px solid ${(props) => props.theme.colors.border};
-  background-color: ${(props) => props.theme.colors.cardBackground};
+  padding: ${(props) => props.theme.spacing(5)} ${(props) => props.theme.spacing(6)};
+  background: ${(props) => props.theme.colors.cardBackground};
+  backdrop-filter: blur(10px);
+  box-shadow: ${(props) => props.theme.shadows.sm};
+  border-bottom: 1px solid ${(props) => props.theme.colors.borderLight};
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  transition: all 0.3s ease;
+
+  @media (max-width: 768px) {
+    padding: ${(props) => props.theme.spacing(4)};
+  }
 `;
 
 const Title = styled.h1`
-  font-size: 1.75rem;
+  font-size: 1.875rem;
   font-weight: 700;
-  color: ${(props) => props.theme.colors.text};
+  background: linear-gradient(135deg, ${(props) => props.theme.colors.gradientStart} 0%, ${(props) => props.theme.colors.gradientEnd} 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
   margin: 0;
+  letter-spacing: -0.025em;
+  
+  @media (max-width: 768px) {
+    font-size: 1.5rem;
+  }
 `;
 
 const ThemeToggle = styled.button`
   display: flex;
   align-items: center;
   gap: ${(props) => props.theme.spacing(2)};
-  padding: ${(props) => props.theme.spacing(2)} ${(props) => props.theme.spacing(3)};
-  background-color: ${(props) => props.theme.colors.cardBackground};
-  border: 1px solid ${(props) => props.theme.colors.border};
-  border-radius: ${(props) => props.theme.radii.md};
+  padding: ${(props) => props.theme.spacing(2.5)} ${(props) => props.theme.spacing(4)};
+  background: ${(props) => props.theme.colors.cardBackground};
+  border: 2px solid ${(props) => props.theme.colors.border};
+  border-radius: ${(props) => props.theme.radii.full};
   color: ${(props) => props.theme.colors.text};
   cursor: pointer;
   font-size: 0.875rem;
-  font-weight: 500;
-  transition: all 0.2s ease;
+  font-weight: 600;
+  font-family: ${(props) => props.theme.fonts.body};
+  box-shadow: ${(props) => props.theme.shadows.sm};
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
   &:hover {
-    background-color: ${(props) => props.theme.colors.border};
+    background: linear-gradient(135deg, ${(props) => props.theme.colors.gradientStart} 0%, ${(props) => props.theme.colors.gradientEnd} 100%);
+    color: ${(props) => props.theme.colors.white};
+    border-color: transparent;
+    box-shadow: ${(props) => props.theme.shadows.md};
+    transform: translateY(-2px);
   }
 
   &:active {
-    transform: scale(0.98);
+    transform: translateY(0) scale(0.98);
+  }
+
+  @media (max-width: 768px) {
+    padding: ${(props) => props.theme.spacing(2)} ${(props) => props.theme.spacing(3)};
+    font-size: 0.813rem;
   }
 `;
 
 const TabsContainer = styled.div`
-  padding: ${(props) => props.theme.spacing(4)};
+  padding: ${(props) => props.theme.spacing(6)};
+  max-width: 1400px;
+  margin: 0 auto;
+
+  @media (max-width: 768px) {
+    padding: ${(props) => props.theme.spacing(4)};
+  }
 `;
 
 /**
@@ -140,7 +176,7 @@ export default function Home() {
         <title>Diff Checker & Validator - Compare and Validate JSON, XML, Text</title>
         <meta name="description" content="Compare and validate JSON, XML, and plain text files with visual diff highlighting. Supports drag & drop, file upload, and clipboard paste." />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
-        <meta name="theme-color" content={themeMode === 'light' ? '#ffffff' : '#111827'} />
+        <meta name="theme-color" content={themeMode === 'light' ? '#3b82f6' : '#60a5fa'} />
         
         {/* Open Graph / Social Media Meta Tags */}
         <meta property="og:title" content="Diff Checker & Validator" />
@@ -170,9 +206,7 @@ export default function Home() {
       </ThemeProvider>
 
       {/* 
-        Global Styles for smooth transitions and animations
-        Injected via styled-components createGlobalStyle would go here
-        if needed for body/html level styles
+        Modern Global Styles with enhanced visual design
       */}
       <style jsx global>{`
         * {
@@ -186,52 +220,61 @@ export default function Home() {
         }
 
         body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-            'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-            sans-serif;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+            'Ubuntu', 'Cantarell', sans-serif;
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
-          transition: background-color 0.3s ease, color 0.3s ease;
+          font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+          transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s ease;
         }
 
-        /* Custom scrollbar styling for modern look */
+        /* Modern custom scrollbar with gradient */
         ::-webkit-scrollbar {
-          width: 12px;
-          height: 12px;
+          width: 14px;
+          height: 14px;
         }
 
         ::-webkit-scrollbar-track {
-          background: ${themeMode === 'light' ? '#f1f1f1' : '#1f2937'};
-          border-radius: 6px;
+          background: ${themeMode === 'light' ? '#f1f5f9' : '#1e293b'};
+          border-radius: 10px;
+          border: 3px solid transparent;
+          background-clip: content-box;
         }
 
         ::-webkit-scrollbar-thumb {
-          background: ${themeMode === 'light' ? '#888' : '#4b5563'};
-          border-radius: 6px;
-          transition: background 0.2s ease;
+          background: ${themeMode === 'light' 
+            ? 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)' 
+            : 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)'};
+          border-radius: 10px;
+          border: 3px solid transparent;
+          background-clip: content-box;
+          transition: all 0.3s ease;
         }
 
         ::-webkit-scrollbar-thumb:hover {
-          background: ${themeMode === 'light' ? '#555' : '#6b7280'};
+          background: ${themeMode === 'light'
+            ? 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)'
+            : 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)'};
         }
 
-        /* Focus visible for keyboard navigation */
+        /* Enhanced focus visible for better accessibility */
         *:focus-visible {
-          outline: 2px solid ${themeMode === 'light' ? '#111827' : '#f9fafb'};
+          outline: 3px solid ${themeMode === 'light' ? '#3b82f6' : '#60a5fa'};
           outline-offset: 2px;
+          border-radius: 4px;
         }
 
-        /* Selection color */
+        /* Modern selection color with gradient */
         ::selection {
-          background-color: ${themeMode === 'light' ? '#111827' : '#f9fafb'};
-          color: ${themeMode === 'light' ? '#ffffff' : '#111827'};
+          background: ${themeMode === 'light' ? '#3b82f6' : '#60a5fa'};
+          color: #ffffff;
         }
 
         /* Smooth animations for theme transitions */
         * {
-          transition-property: background-color, color, border-color;
+          transition-property: background-color, color, border-color, box-shadow;
           transition-duration: 0.3s;
-          transition-timing-function: ease;
+          transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         /* Disable animations for reduced motion preference */
