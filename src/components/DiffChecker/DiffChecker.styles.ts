@@ -511,3 +511,88 @@ export const DropMessage = styled.div`
   }
 `;
 
+// Comparison Options Styled Components
+export const OptionsBar = styled.div`
+  display: flex;
+  gap: ${(props) => props.theme.spacing(4)};
+  padding: ${(props) => props.theme.spacing(3)};
+  background-color: ${(props) => props.theme.colors.cardBackground};
+  border: 1px solid ${(props) => props.theme.colors.border};
+  border-radius: ${(props) => props.theme.radii.md};
+  flex-wrap: wrap;
+  align-items: center;
+  animation: slideDown 0.3s ease-out;
+
+  @keyframes slideDown {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+`;
+
+export const OptionsTitle = styled.span`
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: ${(props) => props.theme.colors.text};
+  margin-right: ${(props) => props.theme.spacing(2)};
+`;
+
+export const CheckboxGroup = styled.div`
+  display: flex;
+  gap: ${(props) => props.theme.spacing(4)};
+  flex-wrap: wrap;
+`;
+
+export const CheckboxLabel = styled.label`
+  display: flex;
+  align-items: center;
+  gap: ${(props) => props.theme.spacing(2)};
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: ${(props) => props.theme.colors.text};
+  user-select: none;
+  transition: all 0.2s ease;
+
+  &:hover {
+    color: ${(props) => props.theme.colors.primary};
+  }
+`;
+
+export const Checkbox = styled.input.attrs({ type: 'checkbox' })`
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: ${(props) => props.theme.colors.primary};
+  border-radius: ${(props) => props.theme.radii.sm};
+  transition: all 0.2s ease;
+
+  &:focus-visible {
+    outline: 2px solid ${(props) => props.theme.colors.primary};
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+export const OptionBadge = styled.span<{ $isActive?: boolean }>`
+  font-size: 0.75rem;
+  padding: ${(props) => props.theme.spacing(1)} ${(props) => props.theme.spacing(2)};
+  border-radius: ${(props) => props.theme.radii.sm};
+  background-color: ${(props) => props.$isActive 
+    ? props.theme.colors.primary + '20' 
+    : props.theme.colors.border};
+  color: ${(props) => props.$isActive 
+    ? props.theme.colors.primary 
+    : props.theme.colors.subtleText};
+  font-weight: 500;
+  transition: all 0.2s ease;
+`;
+

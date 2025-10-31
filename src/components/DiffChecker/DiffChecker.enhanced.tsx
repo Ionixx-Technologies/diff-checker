@@ -28,10 +28,12 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
     rightValidation,
     diffResult,
     isComparing,
+    diffOptions,
     setLeftInput,
     setRightInput,
     setLeftFormat,
     setRightFormat,
+    setDiffOptions,
     autoDetectFormats,
     compare,
     clear,
@@ -192,6 +194,20 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
 
   const stats = getStats();
 
+  /**
+   * Handle comparison option changes
+   * Automatically re-compare if diff result exists
+   */
+  const handleOptionChange = useCallback((option: 'ignoreWhitespace' | 'caseSensitive' | 'ignoreKeyOrder') => {
+    return (e: React.ChangeEvent<HTMLInputElement>) => {
+      setDiffOptions({ [option]: e.target.checked });
+      // If there's already a comparison result, automatically update it
+      if (diffResult && canCompare) {
+        setTimeout(() => compare(), 100);
+      }
+    };
+  }, [diffResult, canCompare, setDiffOptions, compare]);
+
   return (
     <S.Container>
       {/* Header with title and theme toggle */}
@@ -234,6 +250,52 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
           🗑️ Clear All
         </S.Button>
       </S.ControlBar>
+
+      {/* Comparison Options Bar */}
+      <S.OptionsBar role="group" aria-label="Comparison options">
+        <S.OptionsTitle>⚙️ Comparison Options:</S.OptionsTitle>
+        <S.CheckboxGroup>
+          <S.CheckboxLabel>
+            <S.Checkbox
+              checked={diffOptions.ignoreWhitespace}
+              onChange={handleOptionChange('ignoreWhitespace')}
+              aria-label="Ignore whitespace in comparison"
+            />
+            <span>Ignore Whitespace</span>
+            <S.OptionBadge $isActive={diffOptions.ignoreWhitespace}>
+              {diffOptions.ignoreWhitespace ? 'ON' : 'OFF'}
+            </S.OptionBadge>
+          </S.CheckboxLabel>
+          
+          <S.CheckboxLabel>
+            <S.Checkbox
+              checked={diffOptions.caseSensitive}
+              onChange={handleOptionChange('caseSensitive')}
+              aria-label="Case sensitive comparison"
+            />
+            <span>Case Sensitive</span>
+            <S.OptionBadge $isActive={diffOptions.caseSensitive}>
+              {diffOptions.caseSensitive ? 'ON' : 'OFF'}
+            </S.OptionBadge>
+          </S.CheckboxLabel>
+          
+          <S.CheckboxLabel>
+            <S.Checkbox
+              checked={diffOptions.ignoreKeyOrder}
+              onChange={handleOptionChange('ignoreKeyOrder')}
+              disabled={leftFormat !== 'json' || rightFormat !== 'json'}
+              aria-label="Ignore key order in JSON comparison"
+              title={leftFormat !== 'json' || rightFormat !== 'json' ? 'Only available for JSON format' : ''}
+            />
+            <span>Ignore Key Order (JSON)</span>
+            <S.OptionBadge $isActive={diffOptions.ignoreKeyOrder && leftFormat === 'json'}>
+              {leftFormat === 'json' && rightFormat === 'json' 
+                ? (diffOptions.ignoreKeyOrder ? 'ON' : 'OFF')
+                : 'JSON ONLY'}
+            </S.OptionBadge>
+          </S.CheckboxLabel>
+        </S.CheckboxGroup>
+      </S.OptionsBar>
 
       {/* Input panels - responsive grid layout */}
       <S.InputContainer>

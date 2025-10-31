@@ -20,11 +20,65 @@ export interface DiffResult {
   hasChanges: boolean;
 }
 
+export interface DiffOptions {
+  ignoreWhitespace?: boolean;
+  caseSensitive?: boolean;
+  ignoreKeyOrder?: boolean; // For JSON comparison
+}
+
+/**
+ * Normalize a line based on diff options
+ */
+const normalizeLine = (line: string, options: DiffOptions): string => {
+  let normalized = line;
+  
+  if (options.ignoreWhitespace) {
+    // Collapse all whitespace to single spaces and trim
+    normalized = normalized.replace(/\s+/g, ' ').trim();
+  }
+  
+  if (!options.caseSensitive) {
+    normalized = normalized.toLowerCase();
+  }
+  
+  return normalized;
+};
+
+/**
+ * Recursively sort object keys for comparison
+ * Used for JSON key order normalization
+ * Exported for use in useDiffChecker hook
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const sortObjectKeys = (obj: any): any => {
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(sortObjectKeys);
+  }
+  
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sorted: any = {};
+  Object.keys(obj)
+    .sort()
+    .forEach((key) => {
+      sorted[key] = sortObjectKeys(obj[key]);
+    });
+  
+  return sorted;
+};
+
 /**
  * Performs a simple line-by-line diff between two strings
  * Uses a basic LCS (Longest Common Subsequence) inspired algorithm
  */
-export const computeDiff = (left: string, right: string): DiffResult => {
+export const computeDiff = (
+  left: string, 
+  right: string, 
+  options: DiffOptions = { ignoreWhitespace: false, caseSensitive: true, ignoreKeyOrder: false }
+): DiffResult => {
   const leftLines = left.split('\n');
   const rightLines = right.split('\n');
 
@@ -34,6 +88,13 @@ export const computeDiff = (left: string, right: string): DiffResult => {
   let hasChanges = false;
   let leftIndex = 0;
   let rightIndex = 0;
+
+  // Helper function to compare lines based on options
+  const linesMatch = (leftLine: string, rightLine: string): boolean => {
+    const normalizedLeft = normalizeLine(leftLine, options);
+    const normalizedRight = normalizeLine(rightLine, options);
+    return normalizedLeft === normalizedRight;
+  };
 
   // Simple diff algorithm
   while (leftIndex < leftLines.length || rightIndex < rightLines.length) {
@@ -58,7 +119,7 @@ export const computeDiff = (left: string, right: string): DiffResult => {
       });
       hasChanges = true;
       leftIndex++;
-    } else if (leftLine === rightLine) {
+    } else if (linesMatch(leftLine, rightLine)) {
       // Lines are identical
       leftResult.push({
         type: 'unchanged',
@@ -76,8 +137,12 @@ export const computeDiff = (left: string, right: string): DiffResult => {
       rightIndex++;
     } else {
       // Lines are different - check if next lines match
-      const leftNextMatch = rightLines.indexOf(leftLine, rightIndex + 1);
-      const rightNextMatch = leftLines.indexOf(rightLine, leftIndex + 1);
+      const leftNextMatch = rightLines.findIndex((line, idx) => 
+        idx > rightIndex && linesMatch(leftLine, line)
+      );
+      const rightNextMatch = leftLines.findIndex((line, idx) => 
+        idx > leftIndex && linesMatch(rightLine, line)
+      );
 
       if (leftNextMatch !== -1 && (rightNextMatch === -1 || leftNextMatch < rightNextMatch)) {
         // Right line was added

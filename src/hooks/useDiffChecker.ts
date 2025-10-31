@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import { computeDiff, type DiffResult } from '@/utils/diffChecker';
+import { computeDiff, sortObjectKeys, type DiffResult, type DiffOptions } from '@/utils/diffChecker';
 import { validateFormat, detectFormat, type FormatType, type ValidationResult } from '@/utils/formatValidators';
 
 export type InputMode = 'text' | 'file' | 'paste';
@@ -19,6 +19,7 @@ export interface DiffState {
   rightValidation: ValidationResult | null;
   diffResult: DiffResult | null;
   isComparing: boolean;
+  diffOptions: DiffOptions;
 }
 
 export const useDiffChecker = () => {
@@ -31,6 +32,11 @@ export const useDiffChecker = () => {
     rightValidation: null,
     diffResult: null,
     isComparing: false,
+    diffOptions: {
+      ignoreWhitespace: false,
+      caseSensitive: true,
+      ignoreKeyOrder: false,
+    },
   });
 
   // Update left input
@@ -70,6 +76,15 @@ export const useDiffChecker = () => {
       rightFormat: format,
       rightValidation: null,
       diffResult: null,
+    }));
+  }, []);
+
+  // Update diff options
+  const setDiffOptions = useCallback((options: Partial<DiffOptions>) => {
+    setState((prev) => ({
+      ...prev,
+      diffOptions: { ...prev.diffOptions, ...options },
+      diffResult: null, // Clear result to trigger re-comparison
     }));
   }, []);
 
@@ -144,11 +159,23 @@ export const useDiffChecker = () => {
     }
 
     // Use formatted versions for comparison
-    const leftText = leftValidation.formatted || state.leftInput;
-    const rightText = rightValidation.formatted || state.rightInput;
+    let leftText = leftValidation.formatted || state.leftInput;
+    let rightText = rightValidation.formatted || state.rightInput;
 
-    // Compute diff
-    const diffResult = computeDiff(leftText, rightText);
+    // If ignoreKeyOrder is enabled and format is JSON, normalize JSON
+    if (state.diffOptions.ignoreKeyOrder && state.leftFormat === 'json') {
+      try {
+        const leftObj = JSON.parse(leftText);
+        const rightObj = JSON.parse(rightText);
+        leftText = JSON.stringify(sortObjectKeys(leftObj), null, 2);
+        rightText = JSON.stringify(sortObjectKeys(rightObj), null, 2);
+      } catch {
+        // If parsing fails, use original text
+      }
+    }
+
+    // Compute diff with options
+    const diffResult = computeDiff(leftText, rightText, state.diffOptions);
 
     setState((prev) => ({
       ...prev,
@@ -159,11 +186,11 @@ export const useDiffChecker = () => {
     }));
 
     return { success: true, diffResult };
-  }, [state.leftInput, state.rightInput, state.leftFormat, state.rightFormat]);
+  }, [state.leftInput, state.rightInput, state.leftFormat, state.rightFormat, state.diffOptions]);
 
   // Clear all inputs and results
   const clear = useCallback(() => {
-    setState({
+    setState((prev) => ({
       leftInput: '',
       rightInput: '',
       leftFormat: 'text',
@@ -172,7 +199,8 @@ export const useDiffChecker = () => {
       rightValidation: null,
       diffResult: null,
       isComparing: false,
-    });
+      diffOptions: prev.diffOptions, // Preserve diff options
+    }));
   }, []);
 
   // Swap left and right inputs
@@ -190,6 +218,7 @@ export const useDiffChecker = () => {
         hasChanges: prev.diffResult.hasChanges,
       } : null,
       isComparing: false,
+      diffOptions: prev.diffOptions, // Preserve diff options
     }));
   }, []);
 
@@ -206,6 +235,7 @@ export const useDiffChecker = () => {
     setRightInput,
     setLeftFormat,
     setRightFormat,
+    setDiffOptions,
     autoDetectFormats,
     validateInputs,
     compare,
