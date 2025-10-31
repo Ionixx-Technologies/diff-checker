@@ -401,6 +401,10 @@ export const DropOverlay = styled.div`
 `;
 
 export const DropMessage = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: ${(props) => props.theme.spacing(2)};
   font-size: 1.5rem;
   font-weight: 600;
   color: ${(props) => props.theme.colors.primary};
@@ -419,5 +423,12 @@ export const DropMessage = styled.div`
       transform: translateY(-10px);
     }
   }
+`;
+
+export const FileSizeHint = styled.span`
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: ${(props) => props.theme.colors.subtleText};
+  opacity: 0.8;
 `;
 

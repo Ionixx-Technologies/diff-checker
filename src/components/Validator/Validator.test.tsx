@@ -35,11 +35,18 @@ const mockFileReader = () => {
   
   // @ts-expect-error - Mocking FileReader
   global.FileReader = jest.fn().mockImplementation(function() {
-    this.readAsText = jest.fn(function(file: File) {
+    this.readAsText = jest.fn(function(file: File | Blob) {
       // Simulate async file reading
       setTimeout(() => {
         if (this.onload) {
-          this.onload({ target: { result: file.name === 'test.json' ? '{"test": true}' : '<root></root>' } });
+          // Read actual file content
+          const reader = new originalFileReader();
+          reader.onload = (e) => {
+            if (this.onload) {
+              this.onload({ target: { result: e.target?.result } });
+            }
+          };
+          reader.readAsText(file);
         }
       }, 0);
     });
@@ -477,6 +484,132 @@ describe('Validator Component', () => {
       await waitFor(() => {
         expect(dropdown).toHaveValue('XML');
       });
+      
+      restoreFileReader();
+    });
+  });
+
+  describe('File Size Validation', () => {
+    beforeEach(() => {
+      global.alert = jest.fn();
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should reject files larger than 5 MB on drag and drop', async () => {
+      const restoreFileReader = mockFileReader();
+      // Create a file larger than 5 MB
+      const largeContent = 'a'.repeat(6 * 1024 * 1024); // 6 MB
+      const largeFile = new File([largeContent], 'large.json', { type: 'application/json' });
+      
+      renderWithTheme(<Validator />);
+      const textarea = screen.getByPlaceholderText(/Drop .json or .xml file here/i);
+      const dropZone = textarea.parentElement;
+      
+      if (dropZone) {
+        const dropEvent = new Event('drop', { bubbles: true });
+        Object.defineProperty(dropEvent, 'dataTransfer', {
+          value: {
+            files: [largeFile],
+          },
+        });
+        
+        fireEvent(dropZone, dropEvent);
+        
+        await waitFor(() => {
+          expect(global.alert).toHaveBeenCalledWith(
+            expect.stringContaining('exceeds the maximum allowed size of 5 MB')
+          );
+        });
+        
+        // Textarea should remain empty
+        expect(textarea).toHaveValue('');
+      }
+      
+      restoreFileReader();
+    });
+
+    it('should accept files smaller than 5 MB on drag and drop', async () => {
+      const restoreFileReader = mockFileReader();
+      const smallContent = '{"valid": "json"}';
+      const smallFile = new File([smallContent], 'small.json', { type: 'application/json' });
+      
+      renderWithTheme(<Validator />);
+      const textarea = screen.getByPlaceholderText(/Drop .json or .xml file here/i);
+      const dropZone = textarea.parentElement;
+      
+      if (dropZone) {
+        const dropEvent = new Event('drop', { bubbles: true });
+        Object.defineProperty(dropEvent, 'dataTransfer', {
+          value: {
+            files: [smallFile],
+          },
+        });
+        
+        fireEvent(dropZone, dropEvent);
+        
+        await waitFor(() => {
+          expect(textarea).toHaveValue(smallContent);
+        });
+        
+        // Alert should not be called for valid files
+        expect(global.alert).not.toHaveBeenCalled();
+      }
+      
+      restoreFileReader();
+    });
+
+    it('should reject files larger than 5 MB on file upload', async () => {
+      const restoreFileReader = mockFileReader();
+      // Create a file larger than 5 MB
+      const largeContent = 'a'.repeat(7 * 1024 * 1024); // 7 MB
+      const largeFile = new File([largeContent], 'large.xml', { type: 'application/xml' });
+      
+      renderWithTheme(<Validator />);
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      
+      fireEvent.change(fileInput, { target: { files: [largeFile] } });
+      
+      await waitFor(() => {
+        const alertCall = (global.alert as jest.Mock).mock.calls[0][0];
+        expect(alertCall).toMatch(/\d+\.\d+ MB/); // Should show file size
+        expect(alertCall).toContain('5 MB'); // Should show limit
+      });
+      
+      const textarea = screen.getByPlaceholderText(/Drop .json or .xml file here/i);
+      expect(textarea).toHaveValue('');
+      
+      restoreFileReader();
+    });
+
+    it('should display file size in MB in error message', async () => {
+      const restoreFileReader = mockFileReader();
+      const largeContent = 'a'.repeat(8 * 1024 * 1024); // 8 MB
+      const largeFile = new File([largeContent], 'huge.json', { type: 'application/json' });
+      
+      renderWithTheme(<Validator />);
+      const textarea = screen.getByPlaceholderText(/Drop .json or .xml file here/i);
+      const dropZone = textarea.parentElement;
+      
+      if (dropZone) {
+        const dropEvent = new Event('drop', { bubbles: true });
+        Object.defineProperty(dropEvent, 'dataTransfer', {
+          value: {
+            files: [largeFile],
+          },
+        });
+        
+        fireEvent(dropZone, dropEvent);
+        
+        await waitFor(() => {
+          expect(global.alert).toHaveBeenCalled();
+          const alertMessage = (global.alert as jest.Mock).mock.calls[0][0];
+          expect(alertMessage).toContain('8.00 MB'); // Shows exact size
+          expect(alertMessage).toContain('Please select a smaller file');
+        });
+      }
       
       restoreFileReader();
     });

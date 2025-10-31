@@ -47,10 +47,10 @@ describe('DiffChecker Component', () => {
       expect(screen.getByRole('button', { name: /clear all/i })).toBeInTheDocument();
     });
 
-    it('should render format selectors', () => {
+    it('should render format selector', () => {
       renderWithTheme(<DiffChecker />);
-      const selects = screen.getAllByRole('combobox');
-      expect(selects).toHaveLength(2); // Left and right format selectors
+      const select = screen.getByRole('combobox');
+      expect(select).toBeInTheDocument(); // Unified format selector
     });
 
     it('should render empty state initially', () => {
@@ -94,30 +94,35 @@ describe('DiffChecker Component', () => {
   });
 
   describe('Format Selection', () => {
-    it('should change format for left input', () => {
+    it('should change format for both inputs simultaneously', () => {
       renderWithTheme(<DiffChecker />);
-      const leftSelect = screen.getAllByRole('combobox')[0];
+      const formatSelect = screen.getByRole('combobox');
       
-      fireEvent.change(leftSelect, { target: { value: 'json' } });
+      fireEvent.change(formatSelect, { target: { value: 'json' } });
       
-      expect(leftSelect).toHaveValue('json');
+      expect(formatSelect).toHaveValue('json');
+      // Format badges should show JSON (at least 2 occurrences including badges)
+      expect(screen.getAllByText('JSON').length).toBeGreaterThanOrEqual(2);
     });
 
-    it('should change format for right input', () => {
+    it('should change format to XML', () => {
       renderWithTheme(<DiffChecker />);
-      const rightSelect = screen.getAllByRole('combobox')[1];
+      const formatSelect = screen.getByRole('combobox');
       
-      fireEvent.change(rightSelect, { target: { value: 'xml' } });
+      fireEvent.change(formatSelect, { target: { value: 'xml' } });
       
-      expect(rightSelect).toHaveValue('xml');
+      expect(formatSelect).toHaveValue('xml');
+      // Format badges should show XML (at least 2 occurrences including badges)
+      expect(screen.getAllByText('XML').length).toBeGreaterThanOrEqual(2);
     });
 
     it('should default to text format', () => {
       renderWithTheme(<DiffChecker />);
-      const selects = screen.getAllByRole('combobox');
+      const formatSelect = screen.getByRole('combobox');
       
-      expect(selects[0]).toHaveValue('text');
-      expect(selects[1]).toHaveValue('text');
+      expect(formatSelect).toHaveValue('text');
+      // Format badges should show TEXT (at least 2 occurrences including badges)
+      expect(screen.getAllByText('TEXT').length).toBeGreaterThanOrEqual(2);
     });
   });
 
@@ -266,12 +271,10 @@ describe('DiffChecker Component', () => {
     it('should show error for invalid JSON', async () => {
       renderWithTheme(<DiffChecker />);
       const [leftTextArea, rightTextArea] = screen.getAllByRole('textbox');
-      const leftSelect = screen.getAllByRole('combobox')[0];
-      const rightSelect = screen.getAllByRole('combobox')[1];
+      const formatSelect = screen.getByRole('combobox');
       const compareButton = screen.getByRole('button', { name: /compare/i });
       
-      fireEvent.change(leftSelect, { target: { value: 'json' } });
-      fireEvent.change(rightSelect, { target: { value: 'json' } });
+      fireEvent.change(formatSelect, { target: { value: 'json' } });
       fireEvent.change(leftTextArea, { target: { value: '{invalid json}' } });
       fireEvent.change(rightTextArea, { target: { value: '{"valid": "json"}' } });
       fireEvent.click(compareButton);
@@ -286,11 +289,10 @@ describe('DiffChecker Component', () => {
     it('should show success for valid JSON', async () => {
       renderWithTheme(<DiffChecker />);
       const [leftTextArea, rightTextArea] = screen.getAllByRole('textbox');
-      const [leftSelect, rightSelect] = screen.getAllByRole('combobox');
+      const formatSelect = screen.getByRole('combobox');
       const compareButton = screen.getByRole('button', { name: /compare/i });
       
-      fireEvent.change(leftSelect, { target: { value: 'json' } });
-      fireEvent.change(rightSelect, { target: { value: 'json' } });
+      fireEvent.change(formatSelect, { target: { value: 'json' } });
       fireEvent.change(leftTextArea, { target: { value: '{"key": "value"}' } });
       fireEvent.change(rightTextArea, { target: { value: '{"key": "value2"}' } });
       fireEvent.click(compareButton);
@@ -301,17 +303,20 @@ describe('DiffChecker Component', () => {
       });
     });
 
-    it('should show warning for format mismatch', () => {
+    it('should keep formats synchronized with unified selector', () => {
       renderWithTheme(<DiffChecker />);
-      const [leftTextArea, rightTextArea] = screen.getAllByRole('textbox');
-      const [leftSelect, rightSelect] = screen.getAllByRole('combobox');
+      const formatSelect = screen.getByRole('combobox');
       
-      fireEvent.change(leftSelect, { target: { value: 'json' } });
-      fireEvent.change(rightSelect, { target: { value: 'xml' } });
-      fireEvent.change(leftTextArea, { target: { value: 'content' } });
-      fireEvent.change(rightTextArea, { target: { value: 'content' } });
+      // Change to JSON
+      fireEvent.change(formatSelect, { target: { value: 'json' } });
+      expect(screen.getAllByText('JSON').length).toBeGreaterThanOrEqual(2); // Both badges show JSON
       
-      expect(screen.getByText(/Format mismatch/i)).toBeInTheDocument();
+      // Change to XML
+      fireEvent.change(formatSelect, { target: { value: 'xml' } });
+      expect(screen.getAllByText('XML').length).toBeGreaterThanOrEqual(2); // Both badges show XML
+      
+      // Format mismatch warning should never appear
+      expect(screen.queryByText(/Format mismatch/i)).not.toBeInTheDocument();
     });
   });
 
@@ -340,6 +345,100 @@ describe('DiffChecker Component', () => {
     });
   });
 
+  describe('File Size Validation', () => {
+    beforeEach(() => {
+      // Mock alert for file size validation tests
+      global.alert = jest.fn();
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should reject files larger than 5 MB on drag and drop', async () => {
+      // Create a file larger than 5 MB (5 * 1024 * 1024 bytes)
+      const largeContent = 'a'.repeat(6 * 1024 * 1024); // 6 MB
+      const largeFile = new File([largeContent], 'large.txt', { type: 'text/plain' });
+      
+      renderWithTheme(<DiffChecker />);
+      const leftTextArea = screen.getAllByRole('textbox')[0];
+      const dropZone = leftTextArea.parentElement;
+      
+      if (dropZone) {
+        const dropEvent = new Event('drop', { bubbles: true });
+        Object.defineProperty(dropEvent, 'dataTransfer', {
+          value: {
+            files: [largeFile],
+          },
+        });
+        
+        fireEvent(dropZone, dropEvent);
+        
+        await waitFor(() => {
+          expect(global.alert).toHaveBeenCalledWith(
+            expect.stringContaining('exceeds the maximum allowed size of 5 MB')
+          );
+        });
+        
+        // Textarea should remain empty
+        expect(leftTextArea).toHaveValue('');
+      }
+    });
+
+    it('should accept files smaller than 5 MB', async () => {
+      const smallContent = 'Small file content';
+      const smallFile = new File([smallContent], 'small.txt', { type: 'text/plain' });
+      
+      renderWithTheme(<DiffChecker />);
+      const leftTextArea = screen.getAllByRole('textbox')[0];
+      const dropZone = leftTextArea.parentElement;
+      
+      if (dropZone) {
+        const dropEvent = new Event('drop', { bubbles: true });
+        Object.defineProperty(dropEvent, 'dataTransfer', {
+          value: {
+            files: [smallFile],
+          },
+        });
+        
+        fireEvent(dropZone, dropEvent);
+        
+        await waitFor(() => {
+          expect(leftTextArea).toHaveValue(smallContent);
+        });
+        
+        // Alert should not be called for valid files
+        expect(global.alert).not.toHaveBeenCalled();
+      }
+    });
+
+    it('should display file size in MB in error message', async () => {
+      const largeContent = 'a'.repeat(7 * 1024 * 1024); // 7 MB
+      const largeFile = new File([largeContent], 'large.json', { type: 'application/json' });
+      
+      renderWithTheme(<DiffChecker />);
+      const rightTextArea = screen.getAllByRole('textbox')[1];
+      const dropZone = rightTextArea.parentElement;
+      
+      if (dropZone) {
+        const dropEvent = new Event('drop', { bubbles: true });
+        Object.defineProperty(dropEvent, 'dataTransfer', {
+          value: {
+            files: [largeFile],
+          },
+        });
+        
+        fireEvent(dropZone, dropEvent);
+        
+        await waitFor(() => {
+          const alertCall = (global.alert as jest.Mock).mock.calls[0][0];
+          expect(alertCall).toMatch(/\d+\.\d+ MB/); // Should show file size
+          expect(alertCall).toContain('5 MB'); // Should show limit
+        });
+      }
+    });
+  });
+
   describe('Accessibility', () => {
     it('should have ARIA labels on buttons', () => {
       renderWithTheme(<DiffChecker />);
@@ -360,8 +459,7 @@ describe('DiffChecker Component', () => {
     it('should have ARIA labels on selects', () => {
       renderWithTheme(<DiffChecker />);
       
-      expect(screen.getByLabelText(/select format for left input/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/select format for right input/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/select format for both inputs/i)).toBeInTheDocument();
     });
   });
 });

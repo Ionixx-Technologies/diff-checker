@@ -162,6 +162,52 @@ export const Select = styled.select`
   }
 `;
 
+export const FormatGroup = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${(props) => props.theme.spacing(2)};
+  padding: ${(props) => props.theme.spacing(2)};
+  background-color: ${(props) => props.theme.colors.cardBackground};
+  border: 1px solid ${(props) => props.theme.colors.border};
+  border-radius: ${(props) => props.theme.radii.md};
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:focus-within {
+    border-color: ${(props) => props.theme.colors.primary};
+    box-shadow: 0 0 0 3px ${(props) => props.theme.colors.primary}20;
+  }
+
+  @media (max-width: 768px) {
+    width: 100%;
+  }
+`;
+
+export const FormatLabel = styled.label`
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: ${(props) => props.theme.colors.text};
+  white-space: nowrap;
+  user-select: none;
+`;
+
+export const FormatBadge = styled.span`
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: ${(props) => props.theme.spacing(1)} ${(props) => props.theme.spacing(2)};
+  border-radius: ${(props) => props.theme.radii.sm};
+  background: linear-gradient(135deg, ${(props) => props.theme.colors.primary} 0%, ${(props) => props.theme.colors.primaryDark} 100%);
+  color: ${(props) => props.theme.colors.white};
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: ${(props) => props.theme.shadows.sm};
+  transition: all 0.2s ease;
+  
+  &:hover {
+    box-shadow: ${(props) => props.theme.shadows.md};
+    transform: translateY(-1px);
+  }
+`;
+
 export const InputContainer = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -491,6 +537,10 @@ export const DropOverlay = styled.div`
 `;
 
 export const DropMessage = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: ${(props) => props.theme.spacing(2)};
   font-size: 1.5rem;
   font-weight: 600;
   color: ${(props) => props.theme.colors.primary};
@@ -509,6 +559,13 @@ export const DropMessage = styled.div`
       transform: translateY(-10px);
     }
   }
+`;
+
+export const FileSizeHint = styled.span`
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: ${(props) => props.theme.colors.subtleText};
+  opacity: 0.8;
 `;
 
 // Comparison Options Styled Components
