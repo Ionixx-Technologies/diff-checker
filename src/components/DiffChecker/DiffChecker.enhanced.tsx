@@ -196,7 +196,6 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
     <S.Container>
       {/* Header with title and theme toggle */}
       <S.Header>
-        <S.Title>Diff Checker & Validator</S.Title>
         {onThemeToggle && (
           <S.ThemeToggle onClick={onThemeToggle} aria-label={`Switch to ${themeMode === 'light' ? 'dark' : 'light'} mode`}>
             {themeMode === 'light' ? '🌙 Dark Mode' : '☀️ Light Mode'}

@@ -10,15 +10,7 @@ import { useDiffChecker } from '@/hooks/useDiffChecker';
 import type { FormatType } from '@/utils/formatValidators';
 import * as S from './DiffChecker.styles';
 
-interface DiffCheckerProps {
-  themeMode?: 'light' | 'dark';
-  onThemeToggle?: () => void;
-}
-
-export const DiffChecker: React.FC<DiffCheckerProps> = ({
-  themeMode = 'light',
-  onThemeToggle,
-}) => {
+export const DiffChecker: React.FC = () => {
   const {
     leftInput,
     rightInput,
@@ -111,15 +103,6 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
 
   return (
     <S.Container>
-      <S.Header>
-        <S.Title>Diff Checker & Validator</S.Title>
-        {onThemeToggle && (
-          <S.ThemeToggle onClick={onThemeToggle}>
-            {themeMode === 'light' ? '🌙 Dark Mode' : '☀️ Light Mode'}
-          </S.ThemeToggle>
-        )}
-      </S.Header>
-
       <S.ControlBar>
         <S.Button variant="primary" onClick={compare} disabled={!canCompare || isComparing}>
           {isComparing ? 'Comparing...' : '🔍 Compare'}
