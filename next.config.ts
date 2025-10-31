@@ -27,7 +27,7 @@ const nextConfig: NextConfig = {
       {
         test: /\.svg$/i,
         issuer: fileLoaderRule.issuer,
-        resourceQuery: { not: [...(fileLoaderRule.resourceQuery as any).not, /url/] },
+        resourceQuery: { not: [...((fileLoaderRule.resourceQuery as { not: RegExp[] } | undefined)?.not || []), /url/] },
         use: ['@svgr/webpack'],
       },
       {
@@ -37,7 +37,9 @@ const nextConfig: NextConfig = {
       },
     );
 
-    (fileLoaderRule as any).exclude = /\.svg$/i;
+    if (fileLoaderRule) {
+      (fileLoaderRule as WebpackRule & { exclude: RegExp }).exclude = /\.svg$/i;
+    }
 
     return config;
   },

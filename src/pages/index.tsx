@@ -1,8 +1,8 @@
 /**
- * Modern Diff Checker - Main Application Page
+ * Modern Diff Checker & Validator - Main Application Page
  * 
- * Refactored version that integrates all diff-checker functionality directly
- * into the main index page with enhanced UI, drag & drop support, and modern animations.
+ * Integrates both diff-checker and validator functionality with tabs
+ * for easy navigation between tools.
  * 
  * Key Features:
  * - Fully responsive design (mobile, tablet, desktop)
@@ -10,20 +10,74 @@
  * - Theme switching with smooth transitions
  * - Modern UI with animations and hover effects
  * - Accessible (keyboard navigation, ARIA labels)
+ * - Tab-based navigation between Diff Checker and Validator
  */
 
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { ThemeProvider } from 'styled-components';
+import styled from 'styled-components';
 import { DiffChecker } from '@/components/DiffChecker';
+import { Validator } from '@/components/Validator';
+import { Tabs, TabItem } from '@/components/Tabs/Tabs';
 import { lightTheme, darkTheme } from '@/theme';
 
 // Type definition for theme mode
 type ThemeMode = 'light' | 'dark';
 
+// Styled components for the main page layout
+const PageContainer = styled.div`
+  min-height: 100vh;
+  background-color: ${(props) => props.theme.colors.background};
+  transition: background-color 0.3s ease;
+`;
+
+const Header = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: ${(props) => props.theme.spacing(4)};
+  border-bottom: 1px solid ${(props) => props.theme.colors.border};
+  background-color: ${(props) => props.theme.colors.cardBackground};
+`;
+
+const Title = styled.h1`
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: ${(props) => props.theme.colors.text};
+  margin: 0;
+`;
+
+const ThemeToggle = styled.button`
+  display: flex;
+  align-items: center;
+  gap: ${(props) => props.theme.spacing(2)};
+  padding: ${(props) => props.theme.spacing(2)} ${(props) => props.theme.spacing(3)};
+  background-color: ${(props) => props.theme.colors.cardBackground};
+  border: 1px solid ${(props) => props.theme.colors.border};
+  border-radius: ${(props) => props.theme.radii.md};
+  color: ${(props) => props.theme.colors.text};
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background-color: ${(props) => props.theme.colors.border};
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+`;
+
+const TabsContainer = styled.div`
+  padding: ${(props) => props.theme.spacing(4)};
+`;
+
 /**
  * Main application page component
- * Integrates theme management and diff checker functionality
+ * Integrates theme management, tabs, and both diff checker and validator functionality
  */
 export default function Home() {
   // Theme state management
@@ -65,11 +119,25 @@ export default function Home() {
     return null;
   }
 
+  // Define tab items
+  const tabItems: TabItem[] = [
+    {
+      key: 'diff-checker',
+      label: 'Diff Checker',
+      content: <DiffChecker />,
+    },
+    {
+      key: 'validator',
+      label: 'Validator',
+      content: <Validator />,
+    },
+  ];
+
   return (
     <>
       {/* Head section with metadata */}
       <Head>
-        <title>Diff Checker & Validator - Compare JSON, XML, Text</title>
+        <title>Diff Checker & Validator - Compare and Validate JSON, XML, Text</title>
         <meta name="description" content="Compare and validate JSON, XML, and plain text files with visual diff highlighting. Supports drag & drop, file upload, and clipboard paste." />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
         <meta name="theme-color" content={themeMode === 'light' ? '#ffffff' : '#111827'} />
@@ -85,18 +153,20 @@ export default function Home() {
 
       {/* Theme provider wraps the entire application */}
       <ThemeProvider theme={currentTheme}>
-        {/* 
-          DiffChecker Component
-          - Handles all diff comparison logic
-          - Includes drag & drop file upload
-          - Supports manual entry, file upload, clipboard paste
-          - Provides visual diff highlighting
-          - Validates JSON, XML, and plain text formats
-        */}
-        <DiffChecker 
-          themeMode={themeMode} 
-          onThemeToggle={toggleTheme}
-        />
+        <PageContainer>
+          {/* Global Header with Theme Toggle */}
+          <Header>
+            <Title>Diff Checker & Validator</Title>
+            <ThemeToggle onClick={toggleTheme}>
+              {themeMode === 'light' ? '🌙 Dark Mode' : '☀️ Light Mode'}
+            </ThemeToggle>
+          </Header>
+
+          {/* Tabs Container */}
+          <TabsContainer>
+            <Tabs items={tabItems} defaultActiveKey="diff-checker" />
+          </TabsContainer>
+        </PageContainer>
       </ThemeProvider>
 
       {/* 
