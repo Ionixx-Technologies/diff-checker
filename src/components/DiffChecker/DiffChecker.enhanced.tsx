@@ -5,9 +5,15 @@
  * and enhanced interactivity.
  */
 
-import React, { useRef, useCallback, useState } from 'react';
+import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { useDiffChecker } from '@/hooks/useDiffChecker';
 import type { FormatType } from '@/utils/formatValidators';
+import { 
+  setSessionPreserveEnabled, 
+  clearSessionData,
+  getLastSavedTime 
+} from '@/services/sessionStorage';
+import { formatBytes, getStorageSize } from '@/utils/errorHandling';
 import * as S from './DiffChecker.styles';
 
 interface DiffCheckerProps {
@@ -29,6 +35,7 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
     diffResult,
     isComparing,
     diffOptions,
+    preserveSession,
     setLeftInput,
     setRightInput,
     setLeftFormat,
@@ -39,7 +46,33 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
     clear,
     swap,
     canCompare,
+    togglePreserveSession,
   } = useDiffChecker();
+
+  // Track last saved time for display
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const [storageSize, setStorageSize] = useState<string>('0 Bytes');
+
+  // Update last saved time and storage size when preserve session changes
+  useEffect(() => {
+    if (preserveSession) {
+      const updateInfo = async () => {
+        const savedTime = await getLastSavedTime();
+        setLastSaved(savedTime);
+        
+        const size = getStorageSize();
+        setStorageSize(formatBytes(size));
+      };
+
+      updateInfo();
+      
+      // Update every 5 seconds when preservation is active
+      const interval = setInterval(updateInfo, 5000);
+      return () => clearInterval(interval);
+    } else {
+      setLastSaved(null);
+    }
+  }, [preserveSession, leftInput, rightInput, diffOptions]);
 
   const leftFileInputRef = useRef<HTMLInputElement>(null);
   const rightFileInputRef = useRef<HTMLInputElement>(null);
@@ -230,6 +263,46 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
   const stats = getStats();
 
   /**
+   * Handle preserve session toggle
+   */
+  const handlePreserveSessionChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const enabled = e.target.checked;
+    togglePreserveSession(enabled);
+    setSessionPreserveEnabled(enabled);
+    
+    if (!enabled) {
+      // Clear saved data when disabling
+      clearSessionData();
+      setLastSaved(null);
+    }
+  }, [togglePreserveSession]);
+
+  /**
+   * Format last saved time for display
+   */
+  const formatLastSaved = useCallback(() => {
+    if (!lastSaved) return null;
+    
+    try {
+      const savedDate = new Date(lastSaved);
+      const now = new Date();
+      const diffMs = now.getTime() - savedDate.getTime();
+      const diffSecs = Math.floor(diffMs / 1000);
+      const diffMins = Math.floor(diffSecs / 60);
+      const diffHours = Math.floor(diffMins / 60);
+      
+      if (diffSecs < 5) return 'Just now';
+      if (diffSecs < 60) return `${diffSecs} seconds ago`;
+      if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+      if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+      
+      return savedDate.toLocaleString();
+    } catch {
+      return null;
+    }
+  }, [lastSaved]);
+
+  /**
    * Handle unified format change - updates both left and right formats
    * Disables ignoreKeyOrder if format is not JSON
    */
@@ -360,6 +433,35 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
                 : 'JSON ONLY'}
             </S.OptionBadge>
           </S.CheckboxLabel>
+        </S.CheckboxGroup>
+      </S.OptionsBar>
+
+      {/* Session Preservation Toggle */}
+      <S.OptionsBar role="group" aria-label="Session preservation">
+        <S.OptionsTitle>💾 Session Storage:</S.OptionsTitle>
+        <S.CheckboxGroup>
+          <S.CheckboxLabel>
+            <S.Checkbox
+              id="preserve-session"
+              checked={preserveSession}
+              onChange={handlePreserveSessionChange}
+              aria-label="Preserve session data in encrypted localStorage"
+            />
+            <span>Auto-save inputs & settings (Encrypted 🔒)</span>
+            <S.OptionBadge $isActive={preserveSession}>
+              {preserveSession ? 'ENABLED' : 'DISABLED'}
+            </S.OptionBadge>
+          </S.CheckboxLabel>
+          {preserveSession && formatLastSaved() && (
+            <S.LastSavedIndicator>
+              🕐 Last saved: {formatLastSaved()}
+            </S.LastSavedIndicator>
+          )}
+          {preserveSession && (
+            <S.StorageSizeIndicator>
+              📊 Storage: {storageSize}
+            </S.StorageSizeIndicator>
+          )}
         </S.CheckboxGroup>
       </S.OptionsBar>
 
