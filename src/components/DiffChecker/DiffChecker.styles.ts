@@ -653,3 +653,40 @@ export const OptionBadge = styled.span<{ $isActive?: boolean }>`
   transition: all 0.2s ease;
 `;
 
+// Session Storage Indicators
+export const LastSavedIndicator = styled.span`
+  display: flex;
+  align-items: center;
+  gap: ${(props) => props.theme.spacing(1)};
+  font-size: 0.75rem;
+  color: ${(props) => props.theme.colors.subtleText};
+  padding: ${(props) => props.theme.spacing(1)} ${(props) => props.theme.spacing(2)};
+  background-color: ${(props) => props.theme.colors.background};
+  border-radius: ${(props) => props.theme.radii.sm};
+  animation: fadeIn 0.3s ease;
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-5px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+`;
+
+export const StorageSizeIndicator = styled.span`
+  display: flex;
+  align-items: center;
+  gap: ${(props) => props.theme.spacing(1)};
+  font-size: 0.75rem;
+  color: ${(props) => props.theme.colors.subtleText};
+  padding: ${(props) => props.theme.spacing(1)} ${(props) => props.theme.spacing(2)};
+  background-color: ${(props) => props.theme.colors.background};
+  border-radius: ${(props) => props.theme.radii.sm};
+  font-family: 'Courier New', monospace;
+  animation: fadeIn 0.3s ease;
+`;
+
