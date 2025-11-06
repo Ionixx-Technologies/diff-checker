@@ -24,6 +24,7 @@ export interface DiffOptions {
   ignoreWhitespace?: boolean;
   caseSensitive?: boolean;
   ignoreKeyOrder?: boolean; // For JSON comparison
+  ignoreAttributeOrder?: boolean; // For XML comparison
 }
 
 /**
@@ -77,7 +78,7 @@ export const sortObjectKeys = (obj: any): any => {
 export const computeDiff = (
   left: string, 
   right: string, 
-  options: DiffOptions = { ignoreWhitespace: false, caseSensitive: true, ignoreKeyOrder: false }
+  options: DiffOptions = { ignoreWhitespace: false, caseSensitive: true, ignoreKeyOrder: false, ignoreAttributeOrder: false }
 ): DiffResult => {
   const leftLines = left.split('\n');
   const rightLines = right.split('\n');

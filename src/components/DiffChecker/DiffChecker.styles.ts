@@ -251,6 +251,10 @@ export const TextArea = styled.textarea`
   line-height: 1.5;
   resize: vertical;
   transition: all 0.2s ease;
+  
+  /* Performance optimizations */
+  contain: layout style paint;
+  will-change: contents;
 
   &:focus {
     outline: none;
@@ -325,6 +329,8 @@ export const DiffPanel = styled.div`
   display: flex;
   flex-direction: column;
   gap: ${(props) => props.theme.spacing(2)};
+  contain: layout style;
+  will-change: auto;
 `;
 
 export const DiffContent = styled.div`
@@ -333,6 +339,12 @@ export const DiffContent = styled.div`
   border-radius: ${(props) => props.theme.radii.md};
   overflow: auto;
   max-height: 600px;
+  
+  /* Performance optimizations */
+  contain: layout style paint;
+  will-change: scroll-position;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 `;
 
 export const DiffLine = styled.div<{ type: DiffType }>`

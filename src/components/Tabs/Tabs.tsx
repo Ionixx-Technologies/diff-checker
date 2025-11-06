@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { TabsHeader, TabButton, TabsContent } from './Tabs.styles';
+import { saveActiveTab, loadActiveTab } from '@/services/appStorage';
 
 export type TabItem = {
   key: string;
@@ -15,14 +16,31 @@ export type TabsProps = {
 };
 
 export const Tabs: React.FC<TabsProps> = ({ items, defaultActiveKey, activeKey, onChange }) => {
-  const [internalKey, setInternalKey] = React.useState<string>(defaultActiveKey ?? items[0]?.key);
+  const [internalKey, setInternalKey] = React.useState<string>(() => {
+    // Load last active tab from storage on initial render
+    const savedTab = loadActiveTab();
+    if (savedTab && items.some(item => item.key === savedTab)) {
+      return savedTab;
+    }
+    return defaultActiveKey ?? items[0]?.key;
+  });
+
   const currentKey = activeKey ?? internalKey;
   const current = items.find((i) => i.key === currentKey) ?? items[0];
 
   const select = (key: string) => {
     if (activeKey === undefined) setInternalKey(key);
     onChange?.(key);
+    // Save selected tab to storage
+    saveActiveTab(key);
   };
+
+  // Save active tab when it changes externally
+  useEffect(() => {
+    if (currentKey) {
+      saveActiveTab(currentKey);
+    }
+  }, [currentKey]);
 
   return (
     <div>
@@ -49,4 +67,3 @@ export type TabProps = {
 export const Tab: React.FC<TabProps> = ({ children }) => {
   return <>{children}</>;
 };
-

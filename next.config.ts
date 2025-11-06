@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
   compiler: {
     styledComponents: true,
   },
-  webpack(config) {
+  webpack(config, { isServer }) {
     const fileLoaderRule = (config.module.rules as WebpackRule[]).find((rule: WebpackRule) =>
       (rule as WebpackRule).test?.test?.('.svg'),
     ) as WebpackRule;
@@ -39,6 +39,14 @@ const nextConfig: NextConfig = {
 
     if (fileLoaderRule) {
       (fileLoaderRule as WebpackRule & { exclude: RegExp }).exclude = /\.svg$/i;
+    }
+
+    // Support Web Workers
+    if (!isServer) {
+      config.output = {
+        ...config.output,
+        globalObject: 'self',
+      };
     }
 
     return config;

@@ -14,6 +14,8 @@ import {
   getLastSavedTime 
 } from '@/services/sessionStorage';
 import { formatBytes, getStorageSize } from '@/utils/errorHandling';
+import { LoadingOverlay } from './LoadingOverlay';
+import { VirtualDiffContent } from './VirtualDiffContent';
 import * as S from './DiffChecker.styles';
 
 interface DiffCheckerProps {
@@ -44,6 +46,7 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
     autoDetectFormats,
     compare,
     clear,
+    reset,
     swap,
     canCompare,
     togglePreserveSession,
@@ -81,39 +84,126 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
   const [leftDragging, setLeftDragging] = useState(false);
   const [rightDragging, setRightDragging] = useState(false);
 
-  // Maximum file size in bytes (5 MB)
-  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
-
   /**
    * Validate file size before processing
    * Returns true if file is valid, false otherwise
    */
   const validateFileSize = useCallback((file: File): boolean => {
+    const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
     if (file.size > MAX_FILE_SIZE) {
       const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
       alert(
-        `File size (${fileSizeMB} MB) exceeds the maximum allowed size of 5 MB.\n\n` +
-        `Please select a smaller file.`
+        `❌ File Too Large\n\n` +
+        `File size: ${fileSizeMB} MB\n` +
+        `Maximum allowed: 2 MB\n\n` +
+        `Please select a smaller file or compress the content.`
       );
       return false;
     }
     return true;
-  }, [MAX_FILE_SIZE]);
+  }, []);
 
   /**
-   * Generic file reader utility
+   * Validate file format matches the selected format
+   * Returns true if file format is valid, false otherwise
+   */
+  const validateFileFormat = useCallback((file: File, expectedFormat: FormatType): boolean => {
+    const fileName = file.name.toLowerCase();
+    const fileExtension = fileName.split('.').pop() || '';
+    
+    // Define valid extensions for each format
+    const validExtensions: Record<FormatType, string[]> = {
+      json: ['json'],
+      xml: ['xml'],
+      text: ['txt', 'text'],
+    };
+    
+    const allowedExtensions = validExtensions[expectedFormat];
+    
+    if (!allowedExtensions.includes(fileExtension)) {
+      alert(
+        `❌ Invalid File Format\n\n` +
+        `Expected: .${allowedExtensions.join(', .')}\n` +
+        `Received: .${fileExtension}\n\n` +
+        `Please select "${expectedFormat.toUpperCase()}" format in the dropdown or choose a matching file.`
+      );
+      return false;
+    }
+    
+    return true;
+  }, []);
+
+  /**
+   * Comprehensive file validation
+   */
+  const validateFile = useCallback((file: File, expectedFormat: FormatType): boolean => {
+    // Check file size first
+    if (!validateFileSize(file)) {
+      return false;
+    }
+    
+    // Check file format
+    if (!validateFileFormat(file, expectedFormat)) {
+      return false;
+    }
+    
+    return true;
+  }, [validateFileSize, validateFileFormat]);
+
+  /**
+   * Generic file reader utility with chunked reading for large files
    * Reads file content and calls the provided callback
    */
-  const readFile = useCallback((file: File, onLoad: (content: string) => void) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
-      onLoad(content);
-    };
-    reader.onerror = () => {
-      alert('Failed to read file. Please try again.');
-    };
-    reader.readAsText(file);
+  const readFile = useCallback(async (file: File, onLoad: (content: string) => void) => {
+    // For files larger than 500KB, read in chunks
+    const CHUNK_SIZE = 512 * 1024; // 512KB chunks
+
+    if (file.size > CHUNK_SIZE) {
+      try {
+        let content = '';
+        let offset = 0;
+
+        while (offset < file.size) {
+          const chunk = file.slice(offset, offset + CHUNK_SIZE);
+
+          // Use FileReader for better jsdom compatibility
+          const text = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target?.result as string);
+            reader.onerror = () => reject(new Error('Failed to read chunk'));
+            reader.readAsText(chunk);
+          });
+
+          content += text;
+          offset += CHUNK_SIZE;
+
+          // Yield to browser to keep UI responsive
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+
+        // Use requestAnimationFrame for smooth UI update
+        requestAnimationFrame(() => {
+          onLoad(content);
+        });
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to read file:', error);
+        alert('Failed to read file. Please try again.');
+      }
+    } else {
+      // For small files, read normally
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target?.result as string;
+        requestAnimationFrame(() => {
+          onLoad(content);
+        });
+      };
+      reader.onerror = () => {
+        alert('Failed to read file. Please try again.');
+      };
+      reader.readAsText(file);
+    }
   }, []);
 
   /**
@@ -122,14 +212,14 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
   const handleLeftFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Validate file size before reading
-      if (validateFileSize(file)) {
+      // Validate file before reading
+      if (validateFile(file, leftFormat)) {
         readFile(file, setLeftInput);
       }
     }
     // Reset input value to allow re-uploading the same file
     event.target.value = '';
-  }, [readFile, setLeftInput, validateFileSize]);
+  }, [readFile, setLeftInput, validateFile, leftFormat]);
 
   /**
    * Handle file upload for right input via input element
@@ -137,14 +227,14 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
   const handleRightFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Validate file size before reading
-      if (validateFileSize(file)) {
+      // Validate file before reading
+      if (validateFile(file, rightFormat)) {
         readFile(file, setRightInput);
       }
     }
     // Reset input value to allow re-uploading the same file
     event.target.value = '';
-  }, [readFile, setRightInput, validateFileSize]);
+  }, [readFile, setRightInput, validateFile, rightFormat]);
 
   /**
    * Handle drag over event - prevents default to allow drop
@@ -200,37 +290,98 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
       const file = files[0];
+      const expectedFormat = side === 'left' ? leftFormat : rightFormat;
       
-      // Validate file type (text-based files only)
-      const validTypes = [
-        'text/plain',
-        'application/json',
-        'text/xml',
-        'application/xml',
-        'text/html',
-      ];
-      
-      if (!validTypes.includes(file.type) && 
-          !file.name.endsWith('.txt') && 
-          !file.name.endsWith('.json') && 
-          !file.name.endsWith('.xml')) {
-        alert('Please drop a text-based file (.txt, .json, .xml)');
-        return;
-      }
-
-      // Validate file size before reading
-      if (validateFileSize(file)) {
+      // Validate file before reading
+      if (validateFile(file, expectedFormat)) {
         readFile(file, side === 'left' ? setLeftInput : setRightInput);
       }
     }
-  }, [readFile, setLeftInput, setRightInput, validateFileSize]);
+  }, [readFile, setLeftInput, setRightInput, validateFile, leftFormat, rightFormat]);
 
   /**
-   * Handle paste from clipboard
+   * Validate clipboard content format matches expected format
+   */
+  const validateClipboardFormat = useCallback((text: string, expectedFormat: FormatType): boolean => {
+    if (expectedFormat === 'text') {
+      return true; // Text format accepts any content
+    }
+
+    // Try to validate JSON
+    if (expectedFormat === 'json') {
+      try {
+        JSON.parse(text);
+        return true;
+      } catch {
+        alert(
+          `❌ Invalid JSON Format\n\n` +
+          `The clipboard content is not valid JSON.\n` +
+          `Expected format: JSON\n\n` +
+          `Please paste valid JSON content or change the format to TEXT.`
+        );
+        return false;
+      }
+    }
+
+    // Try to validate XML
+    if (expectedFormat === 'xml') {
+      try {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(text, 'text/xml');
+        const parserError = xmlDoc.querySelector('parsererror');
+        
+        if (parserError) {
+          alert(
+            `❌ Invalid XML Format\n\n` +
+            `The clipboard content is not valid XML.\n` +
+            `Expected format: XML\n\n` +
+            `Please paste valid XML content or change the format to TEXT.`
+          );
+          return false;
+        }
+        return true;
+      } catch {
+        alert(
+          `❌ Invalid XML Format\n\n` +
+          `The clipboard content is not valid XML.\n` +
+          `Expected format: XML\n\n` +
+          `Please paste valid XML content or change the format to TEXT.`
+        );
+        return false;
+      }
+    }
+
+    return true;
+  }, []);
+
+  /**
+   * Handle paste from clipboard with content size and format validation
    */
   const handlePaste = useCallback(async (side: 'left' | 'right') => {
     try {
       const text = await navigator.clipboard.readText();
+      
+      // Validate clipboard content size (2MB limit)
+      const textSize = new TextEncoder().encode(text).length;
+      const maxSize = 2 * 1024 * 1024; // 2 MB
+      
+      if (textSize > maxSize) {
+        const sizeMB = (textSize / (1024 * 1024)).toFixed(2);
+        alert(
+          `❌ Clipboard Content Too Large\n\n` +
+          `Content size: ${sizeMB} MB\n` +
+          `Maximum allowed: 2 MB\n\n` +
+          `Please paste smaller content or use file upload with compression.`
+        );
+        return;
+      }
+
+      // Validate content format
+      const expectedFormat = side === 'left' ? leftFormat : rightFormat;
+      if (!validateClipboardFormat(text, expectedFormat)) {
+        return;
+      }
+      
       if (side === 'left') {
         setLeftInput(text);
       } else {
@@ -239,9 +390,47 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to read clipboard:', error);
-      alert('Failed to read from clipboard. Please check your browser permissions.');
+      alert(
+        `❌ Clipboard Access Failed\n\n` +
+        `Unable to read from clipboard.\n` +
+        `Please check your browser permissions.`
+      );
     }
-  }, [setLeftInput, setRightInput]);
+  }, [setLeftInput, setRightInput, leftFormat, rightFormat, validateClipboardFormat]);
+
+  /**
+   * Handle paste event directly in text area with format validation
+   */
+  const handleTextAreaPaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>, side: 'left' | 'right') => {
+    const text = e.clipboardData.getData('text');
+    
+    if (!text) return;
+    
+    // Validate clipboard content size (2MB limit)
+    const textSize = new TextEncoder().encode(text).length;
+    const maxSize = 2 * 1024 * 1024; // 2 MB
+    
+    if (textSize > maxSize) {
+      e.preventDefault();
+      const sizeMB = (textSize / (1024 * 1024)).toFixed(2);
+      alert(
+        `❌ Clipboard Content Too Large\n\n` +
+        `Content size: ${sizeMB} MB\n` +
+        `Maximum allowed: 2 MB\n\n` +
+        `Please paste smaller content or use file upload with compression.`
+      );
+      return;
+    }
+
+    // Validate content format
+    const expectedFormat = side === 'left' ? leftFormat : rightFormat;
+    if (!validateClipboardFormat(text, expectedFormat)) {
+      e.preventDefault();
+      return;
+    }
+    
+    // If validation passes, allow default paste behavior
+  }, [leftFormat, rightFormat, validateClipboardFormat]);
 
   /**
    * Calculate diff statistics for display
@@ -305,6 +494,7 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
   /**
    * Handle unified format change - updates both left and right formats
    * Disables ignoreKeyOrder if format is not JSON
+   * Disables ignoreAttributeOrder if format is not XML
    */
   const handleUnifiedFormatChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const newFormat = e.target.value as FormatType;
@@ -314,16 +504,21 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
       setDiffOptions({ ignoreKeyOrder: false });
     }
     
+    // If changing away from XML, disable ignoreAttributeOrder option
+    if (newFormat !== 'xml' && diffOptions.ignoreAttributeOrder) {
+      setDiffOptions({ ignoreAttributeOrder: false });
+    }
+    
     // Update both formats simultaneously
     setLeftFormat(newFormat);
     setRightFormat(newFormat);
-  }, [diffOptions.ignoreKeyOrder, setDiffOptions, setLeftFormat, setRightFormat]);
+  }, [diffOptions.ignoreKeyOrder, diffOptions.ignoreAttributeOrder, setDiffOptions, setLeftFormat, setRightFormat]);
 
   /**
    * Handle comparison option changes
    * Automatically re-compare if diff result exists
    */
-  const handleOptionChange = useCallback((option: 'ignoreWhitespace' | 'caseSensitive' | 'ignoreKeyOrder') => {
+  const handleOptionChange = useCallback((option: 'ignoreWhitespace' | 'caseSensitive' | 'ignoreKeyOrder' | 'ignoreAttributeOrder') => {
     return (e: React.ChangeEvent<HTMLInputElement>) => {
       setDiffOptions({ [option]: e.target.checked });
       // If there's already a comparison result, automatically update it
@@ -334,7 +529,9 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
   }, [diffResult, canCompare, setDiffOptions, compare]);
 
   return (
-    <S.Container>
+    <>
+      {isComparing && <LoadingOverlay message="Comparing files... Please wait" />}
+      <S.Container>
       {/* Header with title and theme toggle */}
       <S.Header>
         {onThemeToggle && (
@@ -374,20 +571,30 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
         >
           🔮 Auto-detect Format
         </S.Button>
-        <S.Button 
-          onClick={swap} 
-          disabled={!leftInput && !rightInput}
-          aria-label="Swap left and right inputs"
-        >
-          ⇄ Swap
-        </S.Button>
-        <S.Button 
-          variant="danger" 
-          onClick={clear}
-          aria-label="Clear all inputs"
-        >
-          🗑️ Clear All
-        </S.Button>
+  <S.Button 
+    onClick={swap} 
+    disabled={!leftInput && !rightInput}
+    aria-label="Swap left and right inputs"
+  >
+    ⇄ Swap
+  </S.Button>
+  <S.Button 
+    onClick={() => {
+      if (confirm('Reset all inputs and settings to default?\n\nNote: This will clear saved session data.')) {
+        reset();
+      }
+    }}
+    aria-label="Reset to initial state"
+  >
+    🔄 Reset
+  </S.Button>
+  <S.Button 
+    variant="danger" 
+    onClick={clear}
+    aria-label="Clear all inputs"
+  >
+    🗑️ Clear All
+  </S.Button>
       </S.ControlBar>
 
       {/* Comparison Options Bar */}
@@ -418,23 +625,39 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
             </S.OptionBadge>
           </S.CheckboxLabel>
           
-          <S.CheckboxLabel>
-            <S.Checkbox
-              checked={diffOptions.ignoreKeyOrder}
-              onChange={handleOptionChange('ignoreKeyOrder')}
-              disabled={leftFormat !== 'json' || rightFormat !== 'json'}
-              aria-label="Ignore key order in JSON comparison"
-              title={leftFormat !== 'json' || rightFormat !== 'json' ? 'Only available for JSON format' : ''}
-            />
-            <span>Ignore Key Order (JSON)</span>
-            <S.OptionBadge $isActive={diffOptions.ignoreKeyOrder && leftFormat === 'json'}>
-              {leftFormat === 'json' && rightFormat === 'json' 
-                ? (diffOptions.ignoreKeyOrder ? 'ON' : 'OFF')
-                : 'JSON ONLY'}
-            </S.OptionBadge>
-          </S.CheckboxLabel>
-        </S.CheckboxGroup>
-      </S.OptionsBar>
+    <S.CheckboxLabel>
+      <S.Checkbox
+        checked={diffOptions.ignoreKeyOrder}
+        onChange={handleOptionChange('ignoreKeyOrder')}
+        disabled={leftFormat !== 'json' || rightFormat !== 'json'}
+        aria-label="Ignore key order in JSON comparison"
+        title={leftFormat !== 'json' || rightFormat !== 'json' ? 'Only available for JSON format' : ''}
+      />
+      <span>Ignore Key Order (JSON)</span>
+      <S.OptionBadge $isActive={diffOptions.ignoreKeyOrder && leftFormat === 'json'}>
+        {leftFormat === 'json' && rightFormat === 'json' 
+          ? (diffOptions.ignoreKeyOrder ? 'ON' : 'OFF')
+          : 'JSON ONLY'}
+      </S.OptionBadge>
+    </S.CheckboxLabel>
+    
+    <S.CheckboxLabel>
+      <S.Checkbox
+        checked={diffOptions.ignoreAttributeOrder}
+        onChange={handleOptionChange('ignoreAttributeOrder')}
+        disabled={leftFormat !== 'xml' || rightFormat !== 'xml'}
+        aria-label="Ignore attribute order in XML comparison"
+        title={leftFormat !== 'xml' || rightFormat !== 'xml' ? 'Only available for XML format' : ''}
+      />
+      <span>Ignore Attribute Order (XML)</span>
+      <S.OptionBadge $isActive={diffOptions.ignoreAttributeOrder && leftFormat === 'xml'}>
+        {leftFormat === 'xml' && rightFormat === 'xml' 
+          ? (diffOptions.ignoreAttributeOrder ? 'ON' : 'OFF')
+          : 'XML ONLY'}
+      </S.OptionBadge>
+    </S.CheckboxLabel>
+  </S.CheckboxGroup>
+</S.OptionsBar>
 
       {/* Session Preservation Toggle */}
       <S.OptionsBar role="group" aria-label="Session preservation">
@@ -476,14 +699,14 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
 
           {/* Input mode controls */}
           <S.ControlBar>
-            <S.FileInput
-              ref={leftFileInputRef}
-              type="file"
-              id="left-file-input"
-              accept=".txt,.json,.xml"
-              onChange={handleLeftFileUpload}
-              aria-label="Upload file for left input"
-            />
+          <S.FileInput
+            ref={leftFileInputRef}
+            type="file"
+            id="left-file-input"
+            accept={leftFormat === 'json' ? '.json' : leftFormat === 'xml' ? '.xml' : '.txt'}
+            onChange={handleLeftFileUpload}
+            aria-label="Upload file for left input"
+          />
             <S.FileInputLabel htmlFor="left-file-input">
               📁 Upload File
             </S.FileInputLabel>
@@ -502,14 +725,15 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
             <S.TextArea
               value={leftInput}
               onChange={(e) => setLeftInput(e.target.value)}
+              onPaste={(e) => handleTextAreaPaste(e, 'left')}
               placeholder={`Drop file here or paste ${leftFormat.toUpperCase()} content...`}
               aria-label="Left input text area"
             />
             {leftDragging && (
               <S.DropOverlay>
                 <S.DropMessage>
-                  📂 Drop file here
-                  <S.FileSizeHint>(Max 5 MB)</S.FileSizeHint>
+                  📂 Drop {leftFormat.toUpperCase()} file here
+                  <S.FileSizeHint>(Max 2 MB)</S.FileSizeHint>
                 </S.DropMessage>
               </S.DropOverlay>
             )}
@@ -537,14 +761,14 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
 
           {/* Input mode controls */}
           <S.ControlBar>
-            <S.FileInput
-              ref={rightFileInputRef}
-              type="file"
-              id="right-file-input"
-              accept=".txt,.json,.xml"
-              onChange={handleRightFileUpload}
-              aria-label="Upload file for right input"
-            />
+          <S.FileInput
+            ref={rightFileInputRef}
+            type="file"
+            id="right-file-input"
+            accept={rightFormat === 'json' ? '.json' : rightFormat === 'xml' ? '.xml' : '.txt'}
+            onChange={handleRightFileUpload}
+            aria-label="Upload file for right input"
+          />
             <S.FileInputLabel htmlFor="right-file-input">
               📁 Upload File
             </S.FileInputLabel>
@@ -563,14 +787,15 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
             <S.TextArea
               value={rightInput}
               onChange={(e) => setRightInput(e.target.value)}
+              onPaste={(e) => handleTextAreaPaste(e, 'right')}
               placeholder={`Drop file here or paste ${rightFormat.toUpperCase()} content...`}
               aria-label="Right input text area"
             />
             {rightDragging && (
               <S.DropOverlay>
                 <S.DropMessage>
-                  📂 Drop file here
-                  <S.FileSizeHint>(Max 5 MB)</S.FileSizeHint>
+                  📂 Drop {rightFormat.toUpperCase()} file here
+                  <S.FileSizeHint>(Max 2 MB)</S.FileSizeHint>
                 </S.DropMessage>
               </S.DropOverlay>
             )}
@@ -615,36 +840,28 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
           </S.StatItem>
           <S.StatItem>
             <S.StatLabel>Status</S.StatLabel>
-            <S.StatValue>{diffResult.hasChanges ? '✓ Different' : '✗ Identical'}</S.StatValue>
+            <S.StatValue>{diffResult.hasChanges ? '✗ Different' : '✓ Identical'}</S.StatValue>
           </S.StatItem>
         </S.Stats>
       )}
 
-      {/* Diff results display - responsive grid */}
+      {/* Diff results display - responsive grid with virtual scrolling */}
       {diffResult ? (
         <S.DiffContainer>
           <S.DiffPanel>
             <S.PanelTitle>Original (Left) - Diff View</S.PanelTitle>
-            <S.DiffContent role="region" aria-label="Left diff content">
-              {diffResult.leftLines.map((line, index) => (
-                <S.DiffLine key={index} type={line.type}>
-                  <S.LineNumber>{line.lineNumber}</S.LineNumber>
-                  {line.content || ' '}
-                </S.DiffLine>
-              ))}
-            </S.DiffContent>
+            <VirtualDiffContent 
+              lines={diffResult.leftLines} 
+              containerHeight={600}
+            />
           </S.DiffPanel>
 
           <S.DiffPanel>
             <S.PanelTitle>Modified (Right) - Diff View</S.PanelTitle>
-            <S.DiffContent role="region" aria-label="Right diff content">
-              {diffResult.rightLines.map((line, index) => (
-                <S.DiffLine key={index} type={line.type}>
-                  <S.LineNumber>{line.lineNumber}</S.LineNumber>
-                  {line.content || ' '}
-                </S.DiffLine>
-              ))}
-            </S.DiffContent>
+            <VirtualDiffContent 
+              lines={diffResult.rightLines} 
+              containerHeight={600}
+            />
           </S.DiffPanel>
         </S.DiffContainer>
       ) : (
@@ -659,6 +876,7 @@ export const DiffChecker: React.FC<DiffCheckerProps> = ({
         </S.EmptyState>
       )}
     </S.Container>
+    </>
   );
 };
 
