@@ -16,6 +16,7 @@ import {
   getValidatorLastSavedTime,
 } from '@/services/validatorStorage';
 import { formatBytes, getStorageSize } from '@/utils/errorHandling';
+import { downloadFile, getFileTypeInfo } from '@/utils/fileDownload';
 
 type ValidationType = 'JSON' | 'XML';
 
@@ -246,38 +247,92 @@ export const Validator: React.FC = () => {
     }
   }, [preserveSession, content, validationType]);
 
-  // Maximum file size in bytes (5 MB)
-  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
-
   /**
    * Validate file size before processing
    * Returns true if file is valid, false otherwise
    */
   const validateFileSize = useCallback((file: File): boolean => {
+    const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
     if (file.size > MAX_FILE_SIZE) {
       const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
       alert(
-        `File size (${fileSizeMB} MB) exceeds the maximum allowed size of 5 MB.\n\n` +
-        `Please select a smaller file.`
+        `❌ File Too Large\n\n` +
+        `File size: ${fileSizeMB} MB\n` +
+        `Maximum allowed: 2 MB\n\n` +
+        `Please select a smaller file or compress the content.`
       );
       return false;
     }
     return true;
-  }, [MAX_FILE_SIZE]);
+  }, []);
 
   /**
-   * Handle validation
+   * Validate file format matches the selected validation type
+   * Returns true if file format is valid, false otherwise
    */
-  const handleValidate = useCallback(() => {
+  const validateFileFormat = useCallback((file: File, expectedType: ValidationType): boolean => {
+    const fileName = file.name.toLowerCase();
+    const fileExtension = fileName.split('.').pop() || '';
+    
+    // Define valid extensions for each type
+    const validExtensions: Record<ValidationType, string[]> = {
+      JSON: ['json'],
+      XML: ['xml'],
+    };
+    
+    const allowedExtensions = validExtensions[expectedType];
+    
+    if (!allowedExtensions.includes(fileExtension)) {
+      alert(
+        `❌ Invalid File Format\n\n` +
+        `Expected: .${allowedExtensions.join(', .')}\n` +
+        `Received: .${fileExtension}\n\n` +
+        `Please select "${expectedType}" format in the dropdown or choose a matching file.`
+      );
+      return false;
+    }
+    
+    return true;
+  }, []);
+
+  /**
+   * Comprehensive file validation
+   */
+  const validateFile = useCallback((file: File, expectedType: ValidationType): boolean => {
+    // Check file size first
+    if (!validateFileSize(file)) {
+      return false;
+    }
+    
+    // Check file format
+    if (!validateFileFormat(file, expectedType)) {
+      return false;
+    }
+    
+    return true;
+  }, [validateFileSize, validateFileFormat]);
+
+  /**
+   * Handle validation with async processing
+   */
+  const handleValidate = useCallback(async () => {
     setIsValidating(true);
     
-    // Small delay for UX (shows loading state)
-    setTimeout(() => {
-      try {
-        const result = validationType === 'JSON' 
-          ? validateJSON(content) 
-          : validateXML(content);
-        
+    // Yield to browser to show loading state
+    await new Promise(resolve => setTimeout(resolve, 0));
+    
+    try {
+      // Perform validation asynchronously
+      const result = await new Promise<ValidationResult>((resolve) => {
+        setTimeout(() => {
+          resolve(validationType === 'JSON' 
+            ? validateJSON(content) 
+            : validateXML(content));
+        }, 0);
+      });
+      
+      // Use requestAnimationFrame for smooth update
+      requestAnimationFrame(() => {
         setValidationResult(result);
         setIsValidating(false);
 
@@ -295,16 +350,16 @@ export const Validator: React.FC = () => {
             console.error('Error scrolling to position:', scrollError);
           }
         }
-      } catch (error) {
-        // Handle any unexpected errors during validation
-        setValidationResult({
-          isValid: false,
-          message: 'Validation Error',
-          error: `Unexpected error during validation: ${(error as Error).message || 'Unknown error'}`,
-        });
-        setIsValidating(false);
-      }
-    }, 300);
+      });
+    } catch (error) {
+      // Handle any unexpected errors during validation
+      setValidationResult({
+        isValid: false,
+        message: 'Validation Error',
+        error: `Unexpected error during validation: ${(error as Error).message || 'Unknown error'}`,
+      });
+      setIsValidating(false);
+    }
   }, [content, validationType]);
 
   /**
@@ -423,19 +478,20 @@ export const Validator: React.FC = () => {
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
       const file = files[0];
-      
-      // Validate file type - only accept .json and .xml files
+
+      // Auto-detect format based on file extension BEFORE validation
       const fileName = file.name.toLowerCase();
-      const validExtensions = ['.json', '.xml'];
-      const isValidFile = validExtensions.some(ext => fileName.endsWith(ext));
-      
-      if (!isValidFile) {
-        alert('Please drop only .json or .xml files');
-        return;
+      let detectedType: ValidationType = validationType;
+      if (fileName.endsWith('.json')) {
+        detectedType = 'JSON';
+        setValidationType('JSON');
+      } else if (fileName.endsWith('.xml')) {
+        detectedType = 'XML';
+        setValidationType('XML');
       }
 
-      // Validate file size before reading
-      if (!validateFileSize(file)) {
+      // Validate file with the detected type
+      if (!validateFile(file, detectedType)) {
         return;
       }
 
@@ -446,27 +502,20 @@ export const Validator: React.FC = () => {
           const fileContent = event.target?.result as string;
           setContent(fileContent);
           setValidationResult(null);
-          
-          // Auto-detect format based on file extension
-          if (fileName.endsWith('.json')) {
-            setValidationType('JSON');
-          } else if (fileName.endsWith('.xml')) {
-            setValidationType('XML');
-          }
         } catch (error) {
           // eslint-disable-next-line no-console
           console.error('Error reading file:', error);
-          alert('Failed to read file content. Please try again.');
+          alert('❌ Failed to read file content. Please try again.');
         }
       };
       reader.onerror = () => {
         // eslint-disable-next-line no-console
         console.error('FileReader error');
-        alert('Failed to read file. Please try again.');
+        alert('❌ Failed to read file. Please try again.');
       };
       reader.readAsText(file);
     }
-  }, [validateFileSize]);
+  }, [validateFile, validationType]);
 
   /**
    * Handle file upload via input element
@@ -474,8 +523,19 @@ export const Validator: React.FC = () => {
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Validate file size before reading
-      if (!validateFileSize(file)) {
+      // Auto-detect format based on file extension BEFORE validation
+      const fileName = file.name.toLowerCase();
+      let detectedType: ValidationType = validationType;
+      if (fileName.endsWith('.json')) {
+        detectedType = 'JSON';
+        setValidationType('JSON');
+      } else if (fileName.endsWith('.xml')) {
+        detectedType = 'XML';
+        setValidationType('XML');
+      }
+
+      // Validate file with the detected type
+      if (!validateFile(file, detectedType)) {
         // Reset input to allow re-selection
         event.target.value = '';
         return;
@@ -487,57 +547,132 @@ export const Validator: React.FC = () => {
           const fileContent = e.target?.result as string;
           setContent(fileContent);
           setValidationResult(null);
-          
-          // Auto-detect format based on file extension
-          if (file.name.endsWith('.json')) {
-            setValidationType('JSON');
-          } else if (file.name.endsWith('.xml')) {
-            setValidationType('XML');
-          }
         } catch (error) {
           // eslint-disable-next-line no-console
           console.error('Error reading file:', error);
-          alert('Failed to read file content. Please try again.');
+          alert('❌ Failed to read file content. Please try again.');
         }
       };
       reader.onerror = () => {
         // eslint-disable-next-line no-console
         console.error('FileReader error');
-        alert('Failed to read file. Please try again.');
+        alert('❌ Failed to read file. Please try again.');
       };
       reader.readAsText(file);
     }
     // Reset input value to allow re-uploading the same file
     event.target.value = '';
-  }, [validateFileSize]);
+  }, [validateFile, validationType]);
 
   /**
-   * Handle paste from clipboard
+   * Validate clipboard content format matches expected type
+   */
+  const validateClipboardFormat = useCallback((text: string, expectedType: ValidationType): boolean => {
+    // Try to validate JSON
+    if (expectedType === 'JSON') {
+      try {
+        JSON.parse(text);
+        return true;
+      } catch {
+        alert(
+          `❌ Invalid JSON Format\n\n` +
+          `The clipboard content is not valid JSON.\n` +
+          `Expected format: JSON\n\n` +
+          `Please paste valid JSON content or change the format to XML.`
+        );
+        return false;
+      }
+    }
+
+    // Try to validate XML
+    if (expectedType === 'XML') {
+      try {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(text, 'text/xml');
+        const parserError = xmlDoc.querySelector('parsererror');
+        
+        if (parserError) {
+          alert(
+            `❌ Invalid XML Format\n\n` +
+            `The clipboard content is not valid XML.\n` +
+            `Expected format: XML\n\n` +
+            `Please paste valid XML content or change the format to JSON.`
+          );
+          return false;
+        }
+        return true;
+      } catch {
+        alert(
+          `❌ Invalid XML Format\n\n` +
+          `The clipboard content is not valid XML.\n` +
+          `Expected format: XML\n\n` +
+          `Please paste valid XML content or change the format to JSON.`
+        );
+        return false;
+      }
+    }
+
+    return true;
+  }, []);
+
+  /**
+   * Handle paste from clipboard with content size and format validation
    */
   const handlePaste = useCallback(async () => {
     try {
       const text = await navigator.clipboard.readText();
+      
+      // Validate clipboard content size (2MB limit)
+      const textSize = new TextEncoder().encode(text).length;
+      const maxSize = 2 * 1024 * 1024; // 2 MB
+      
+      if (textSize > maxSize) {
+        const sizeMB = (textSize / (1024 * 1024)).toFixed(2);
+        alert(
+          `❌ Clipboard Content Too Large\n\n` +
+          `Content size: ${sizeMB} MB\n` +
+          `Maximum allowed: 2 MB\n\n` +
+          `Please paste smaller content or use file upload with compression.`
+        );
+        return;
+      }
+
+      // Validate content format
+      if (!validateClipboardFormat(text, validationType)) {
+        return;
+      }
+      
       setContent(text);
       setValidationResult(null);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to read clipboard:', error);
-      alert('Failed to read from clipboard. Please check your browser permissions.');
+      alert(
+        `❌ Clipboard Access Failed\n\n` +
+        `Unable to read from clipboard.\n` +
+        `Please check your browser permissions.`
+      );
     }
-  }, []);
+  }, [validationType, validateClipboardFormat]);
 
   /**
-   * Format content (prettify JSON/XML)
+   * Format content (prettify JSON/XML) with async processing
    */
-  const handleFormat = useCallback(() => {
+  const handleFormat = useCallback(async () => {
     if (!content.trim()) return;
 
     try {
       if (validationType === 'JSON') {
         try {
+          // Parse and format asynchronously
+          await new Promise(resolve => setTimeout(resolve, 0));
           const parsed = JSON.parse(content);
           const formatted = JSON.stringify(parsed, null, 2);
-          setContent(formatted);
+          
+          // Use requestAnimationFrame for smooth update
+          requestAnimationFrame(() => {
+            setContent(formatted);
+          });
         } catch (jsonError) {
           // eslint-disable-next-line no-console
           console.error('JSON formatting error:', jsonError);
@@ -545,7 +680,8 @@ export const Validator: React.FC = () => {
         }
       } else if (validationType === 'XML') {
         try {
-          // Basic XML formatting
+          // Format XML asynchronously
+          await new Promise(resolve => setTimeout(resolve, 0));
           const parser = new DOMParser();
           const xmlDoc = parser.parseFromString(content, 'text/xml');
           
@@ -553,7 +689,8 @@ export const Validator: React.FC = () => {
             const serializer = new XMLSerializer();
             let formatted = serializer.serializeToString(xmlDoc);
             
-            // Simple formatting with indentation
+            // Format with indentation asynchronously
+            await new Promise(resolve => setTimeout(resolve, 0));
             formatted = formatted
               .replace(/></g, '>\n<')
               .split('\n')
@@ -568,7 +705,10 @@ export const Validator: React.FC = () => {
               })
               .join('\n');
             
-            setContent(formatted);
+            // Use requestAnimationFrame for smooth update
+            requestAnimationFrame(() => {
+              setContent(formatted);
+            });
           } else {
             alert('Cannot format invalid XML. Please validate your XML first.');
           }
@@ -585,6 +725,80 @@ export const Validator: React.FC = () => {
       alert('An error occurred while formatting. Please check your content and try again.');
     }
   }, [content, validationType]);
+
+  /**
+   * Handle download of formatted content
+   */
+  const handleDownload = useCallback(() => {
+    if (!content.trim()) return;
+
+    try {
+      const { mimeType, extension } = getFileTypeInfo(validationType);
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const filename = `formatted-${timestamp}.${extension}`;
+
+      downloadFile({
+        content,
+        filename,
+        mimeType,
+      });
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Download error:', error);
+      alert('Failed to download file. Please try again.');
+    }
+  }, [content, validationType]);
+
+  /**
+   * Handle reset to initial state and clear session storage
+   */
+  const handleReset = useCallback(() => {
+    setContent('');
+    setValidationResult(null);
+    
+    // Reset validation type to default
+    setValidationType('JSON');
+    
+    // Disable session storage
+    setPreserveSession(false);
+    setValidatorSessionEnabled(false);
+    
+    // Clear session storage data
+    clearValidatorData();
+  }, []);
+
+  /**
+   * Handle paste event directly in text area with format validation
+   */
+  const handleTextAreaPaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const text = e.clipboardData.getData('text');
+    
+    if (!text) return;
+    
+    // Validate clipboard content size (2MB limit)
+    const textSize = new TextEncoder().encode(text).length;
+    const maxSize = 2 * 1024 * 1024; // 2 MB
+    
+    if (textSize > maxSize) {
+      e.preventDefault();
+      const sizeMB = (textSize / (1024 * 1024)).toFixed(2);
+      alert(
+        `❌ Clipboard Content Too Large\n\n` +
+        `Content size: ${sizeMB} MB\n` +
+        `Maximum allowed: 2 MB\n\n` +
+        `Please paste smaller content or use file upload with compression.`
+      );
+      return;
+    }
+
+    // Validate content format
+    if (!validateClipboardFormat(text, validationType)) {
+      e.preventDefault();
+      return;
+    }
+    
+    // If validation passes, allow default paste behavior
+  }, [validationType, validateClipboardFormat]);
 
   /**
    * Calculate statistics
@@ -619,7 +833,24 @@ export const Validator: React.FC = () => {
           {isValidating ? 'Validating...' : '✓ Validate'}
         </S.Button>
         <S.Button onClick={handleFormat} disabled={!content.trim()}>
-          ✨ Format
+          ✨ Formatter
+        </S.Button>
+        <S.Button 
+          onClick={handleDownload} 
+          disabled={!content.trim()}
+          title={`Download as ${validationType}`}
+        >
+          💾 Download
+        </S.Button>
+        <S.Button 
+          onClick={() => {
+            if (confirm('Reset all content and settings to default?\n\nNote: This will clear saved session data.')) {
+              handleReset();
+            }
+          }}
+          title="Reset to initial state"
+        >
+          🔄 Reset
         </S.Button>
         <S.Button variant="danger" onClick={handleClear} disabled={!content}>
           🗑️ Clear
@@ -665,13 +896,13 @@ export const Validator: React.FC = () => {
         </S.PanelHeader>
 
         <S.ControlBar>
-          <S.FileInput
-            ref={fileInputRef}
-            type="file"
-            id="validator-file-input"
-            accept=".json,.xml"
-            onChange={handleFileUpload}
-          />
+        <S.FileInput
+          ref={fileInputRef}
+          type="file"
+          id="validator-file-input"
+          accept={validationType === 'JSON' ? '.json' : '.xml'}
+          onChange={handleFileUpload}
+        />
           <S.FileInputLabel htmlFor="validator-file-input">
             📁 Upload File
           </S.FileInputLabel>
@@ -691,6 +922,7 @@ export const Validator: React.FC = () => {
             ref={textAreaRef}
             value={content}
             onChange={handleContentChange}
+            onPaste={handleTextAreaPaste}
             placeholder={`Drop .json or .xml file here, or type ${validationType} content...`}
             $hasError={validationResult !== null && !validationResult.isValid}
           />
@@ -698,7 +930,7 @@ export const Validator: React.FC = () => {
             <S.DropOverlay>
               <S.DropMessage>
                 📂 Drop {validationType} file here
-                <S.FileSizeHint>(Max 5 MB)</S.FileSizeHint>
+                <S.FileSizeHint>(Max 2 MB)</S.FileSizeHint>
               </S.DropMessage>
             </S.DropOverlay>
           )}

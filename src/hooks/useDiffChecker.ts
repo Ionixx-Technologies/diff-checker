@@ -5,14 +5,18 @@
  * Includes session storage integration for preserving user data
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { computeDiff, sortObjectKeys, type DiffResult, type DiffOptions } from '@/utils/diffChecker';
 import { validateFormat, detectFormat, type FormatType, type ValidationResult } from '@/utils/formatValidators';
-import { 
-  saveSessionData, 
-  loadSessionData, 
-  isSessionPreserveEnabled 
+import { normalizeXMLAttributes } from '@/utils/xmlNormalizer';
+import {
+  saveSessionData,
+  loadSessionData,
+  isSessionPreserveEnabled,
+  clearSessionData,
+  setSessionPreserveEnabled
 } from '@/services/sessionStorage';
+import { createDiffWorker } from '@/workers/workerFactory';
 
 export type InputMode = 'text' | 'file' | 'paste';
 
@@ -33,6 +37,7 @@ const defaultDiffOptions: DiffOptions = {
   ignoreWhitespace: false,
   caseSensitive: true,
   ignoreKeyOrder: false,
+  ignoreAttributeOrder: false,
 };
 
 export const useDiffChecker = () => {
@@ -49,6 +54,18 @@ export const useDiffChecker = () => {
     preserveSession: isSessionPreserveEnabled(),
   });
 
+  const workerRef = useRef<Worker | null>(null);
+
+  // Initialize Web Worker
+  useEffect(() => {
+    // Create worker using factory (returns null in test environment)
+    workerRef.current = createDiffWorker();
+
+    return () => {
+      workerRef.current?.terminate();
+    };
+  }, []);
+
   // Load saved session on mount (async)
   useEffect(() => {
     const loadSavedSession = async () => {
@@ -63,7 +80,7 @@ export const useDiffChecker = () => {
           rightInput: savedSession.rightInput,
           leftFormat: savedSession.leftFormat,
           rightFormat: savedSession.rightFormat,
-          diffOptions: savedSession.diffOptions,
+          diffOptions: { ...defaultDiffOptions, ...savedSession.diffOptions },
           preserveSession: true,
         }));
       }
@@ -188,15 +205,16 @@ export const useDiffChecker = () => {
     };
   }, [state.leftInput, state.rightInput, state.leftFormat, state.rightFormat]);
 
-  // Compare inputs and generate diff
-  const compare = useCallback(() => {
+  // Compare inputs and generate diff with Web Worker support
+  const compare = useCallback(async () => {
     setState((prev) => ({ ...prev, isComparing: true }));
 
-    // First validate both inputs
+    // Yield to browser to show loading state
+    await new Promise(resolve => setTimeout(resolve, 0));
+
     const leftValidation = validateFormat(state.leftInput, state.leftFormat);
     const rightValidation = validateFormat(state.rightInput, state.rightFormat);
 
-    // Check if formats match
     if (state.leftFormat !== state.rightFormat) {
       setState((prev) => ({
         ...prev,
@@ -205,13 +223,9 @@ export const useDiffChecker = () => {
         diffResult: null,
         isComparing: false,
       }));
-      return {
-        success: false,
-        error: 'Format mismatch: Cannot compare different formats',
-      };
+      return { success: false, error: 'Format mismatch' };
     }
 
-    // If either is invalid, don't proceed with diff
     if (!leftValidation.isValid || !rightValidation.isValid) {
       setState((prev) => ({
         ...prev,
@@ -220,30 +234,92 @@ export const useDiffChecker = () => {
         diffResult: null,
         isComparing: false,
       }));
-      return {
-        success: false,
-        error: 'Cannot compare: One or both inputs are invalid',
-      };
+      return { success: false, error: 'Invalid input' };
     }
 
-    // Use formatted versions for comparison
     let leftText = leftValidation.formatted || state.leftInput;
     let rightText = rightValidation.formatted || state.rightInput;
 
-    // If ignoreKeyOrder is enabled and format is JSON, normalize JSON
+    // JSON key order normalization (async)
     if (state.diffOptions.ignoreKeyOrder && state.leftFormat === 'json') {
       try {
+        await new Promise(resolve => setTimeout(resolve, 0));
         const leftObj = JSON.parse(leftText);
         const rightObj = JSON.parse(rightText);
         leftText = JSON.stringify(sortObjectKeys(leftObj), null, 2);
         rightText = JSON.stringify(sortObjectKeys(rightObj), null, 2);
       } catch {
-        // If parsing fails, use original text
+        // Use original text if parsing fails
       }
     }
 
-    // Compute diff with options
-    const diffResult = computeDiff(leftText, rightText, state.diffOptions);
+    // XML attribute order normalization (async)
+    if (state.diffOptions.ignoreAttributeOrder && state.leftFormat === 'xml') {
+      try {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        leftText = normalizeXMLAttributes(leftText);
+        rightText = normalizeXMLAttributes(rightText);
+      } catch {
+        // Use original text if normalization fails
+      }
+    }
+
+    // Use Web Worker for files larger than 10KB (reduced threshold)
+    const isLargeFile = leftText.length > 10000 || rightText.length > 10000;
+
+    if (isLargeFile && workerRef.current) {
+      try {
+        const diffResult = await new Promise<DiffResult>((resolve, reject) => {
+          const timeoutId = setTimeout(() => {
+            reject(new Error('Worker timeout'));
+          }, 30000); // 30 second timeout
+
+          const handleMessage = (e: MessageEvent) => {
+            clearTimeout(timeoutId);
+            if (e.data.success) {
+              resolve(e.data.result);
+            } else {
+              reject(new Error(e.data.error));
+            }
+            workerRef.current?.removeEventListener('message', handleMessage);
+          };
+
+          workerRef.current?.addEventListener('message', handleMessage);
+          workerRef.current?.postMessage({
+            type: 'COMPUTE_DIFF',
+            payload: { left: leftText, right: rightText, options: state.diffOptions },
+          });
+        });
+
+        // Use requestAnimationFrame for smooth state update
+        await new Promise(resolve => requestAnimationFrame(resolve));
+
+        setState((prev) => ({
+          ...prev,
+          leftValidation,
+          rightValidation,
+          diffResult,
+          isComparing: false,
+        }));
+
+        return { success: true, diffResult };
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Worker diff failed, falling back to async processing:', error);
+        // Fall through to async processing
+      }
+    }
+
+    // Async diff processing for smoother UI
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const diffResult = await new Promise<DiffResult>((resolve) => {
+      setTimeout(() => {
+        resolve(computeDiff(leftText, rightText, state.diffOptions));
+      }, 0);
+    });
+
+    // Use requestAnimationFrame for smooth state update
+    await new Promise(resolve => requestAnimationFrame(resolve));
 
     setState((prev) => ({
       ...prev,
@@ -283,6 +359,28 @@ export const useDiffChecker = () => {
     }
   }, [state.preserveSession]);
 
+  // Reset to initial state and clear session storage
+  const reset = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      leftInput: '',
+      rightInput: '',
+      leftFormat: 'text',
+      rightFormat: 'text',
+      leftValidation: null,
+      rightValidation: null,
+      diffResult: null,
+      isComparing: false,
+      diffOptions: defaultDiffOptions,
+      // Disable session storage
+      preserveSession: false,
+    }));
+    
+    // Clear session storage data and disable the feature
+    clearSessionData();
+    setSessionPreserveEnabled(false);
+  }, []);
+
   // Swap left and right inputs
   const swap = useCallback(() => {
     setState((prev) => ({
@@ -298,8 +396,8 @@ export const useDiffChecker = () => {
         hasChanges: prev.diffResult.hasChanges,
       } : null,
       isComparing: false,
-      diffOptions: prev.diffOptions, // Preserve diff options
-      preserveSession: prev.preserveSession, // Preserve session setting
+      diffOptions: prev.diffOptions,
+      preserveSession: prev.preserveSession,
     }));
   }, []);
 
@@ -321,9 +419,10 @@ export const useDiffChecker = () => {
     validateInputs,
     compare,
     clear,
+    reset,
     swap,
     canCompare,
-    togglePreserveSession, // Export session preservation toggle
+    togglePreserveSession,
   };
 };
 
