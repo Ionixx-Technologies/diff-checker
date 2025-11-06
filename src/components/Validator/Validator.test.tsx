@@ -34,8 +34,10 @@ const mockFileReader = () => {
   const originalFileReader = global.FileReader;
   
   // @ts-expect-error - Mocking FileReader
-  global.FileReader = jest.fn().mockImplementation(function() {
-    this.readAsText = jest.fn(function(file: File | Blob) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  global.FileReader = jest.fn().mockImplementation(function(this: any) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.readAsText = jest.fn(function(this: any, file: File | Blob) {
       // Simulate async file reading
       setTimeout(() => {
         if (this.onload) {
@@ -368,41 +370,49 @@ describe('Validator Component', () => {
     it('should handle XML file drop', async () => {
       const restoreFileReader = mockFileReader();
       renderWithTheme(<Validator />);
-      
+
       const textarea = screen.getByPlaceholderText(/Drop .json or .xml file here/i);
       const dropZone = textarea.parentElement;
-      
+      const dropdown = screen.getByRole('combobox');
+
       const xmlFile = new File(['<root></root>'], 'test.xml', { type: 'application/xml' });
-      
+
       fireEvent.drop(dropZone!, {
         dataTransfer: {
           files: [xmlFile],
         },
       });
-      
+
+      // Should auto-detect XML format and populate content
       await waitFor(() => {
+        expect(dropdown).toHaveValue('XML');
         expect(textarea).toHaveValue('<root></root>');
-      });
-      
+      }, { timeout: 3000 });
+
       restoreFileReader();
     });
 
     it('should reject non-JSON/XML files', async () => {
       renderWithTheme(<Validator />);
-      
+
       const textarea = screen.getByPlaceholderText(/Drop .json or .xml file here/i);
       const dropZone = textarea.parentElement;
-      
+
       const txtFile = new File(['plain text'], 'test.txt', { type: 'text/plain' });
-      
+
       fireEvent.drop(dropZone!, {
         dataTransfer: {
           files: [txtFile],
         },
       });
-      
+
       await waitFor(() => {
-        expect(global.alert).toHaveBeenCalledWith('Please drop only .json or .xml files');
+        expect(global.alert).toHaveBeenCalledWith(
+          `❌ Invalid File Format\n\n` +
+          `Expected: .json\n` +
+          `Received: .txt\n\n` +
+          `Please select "JSON" format in the dropdown or choose a matching file.`
+        );
       });
     });
 
@@ -498,10 +508,10 @@ describe('Validator Component', () => {
       jest.restoreAllMocks();
     });
 
-    it('should reject files larger than 5 MB on drag and drop', async () => {
+    it('should reject files larger than 2 MB on drag and drop', async () => {
       const restoreFileReader = mockFileReader();
-      // Create a file larger than 5 MB
-      const largeContent = 'a'.repeat(6 * 1024 * 1024); // 6 MB
+      // Create a file larger than 2 MB
+      const largeContent = 'a'.repeat(3 * 1024 * 1024); // 3 MB
       const largeFile = new File([largeContent], 'large.json', { type: 'application/json' });
       
       renderWithTheme(<Validator />);
@@ -520,7 +530,7 @@ describe('Validator Component', () => {
         
         await waitFor(() => {
           expect(global.alert).toHaveBeenCalledWith(
-            expect.stringContaining('exceeds the maximum allowed size of 5 MB')
+            expect.stringContaining('2 MB')
           );
         });
         
@@ -531,7 +541,7 @@ describe('Validator Component', () => {
       restoreFileReader();
     });
 
-    it('should accept files smaller than 5 MB on drag and drop', async () => {
+    it('should accept files smaller than 2 MB on drag and drop', async () => {
       const restoreFileReader = mockFileReader();
       const smallContent = '{"valid": "json"}';
       const smallFile = new File([smallContent], 'small.json', { type: 'application/json' });
@@ -561,10 +571,10 @@ describe('Validator Component', () => {
       restoreFileReader();
     });
 
-    it('should reject files larger than 5 MB on file upload', async () => {
+    it('should reject files larger than 2 MB on file upload', async () => {
       const restoreFileReader = mockFileReader();
-      // Create a file larger than 5 MB
-      const largeContent = 'a'.repeat(7 * 1024 * 1024); // 7 MB
+      // Create a file larger than 2 MB
+      const largeContent = 'a'.repeat(3 * 1024 * 1024); // 3 MB
       const largeFile = new File([largeContent], 'large.xml', { type: 'application/xml' });
       
       renderWithTheme(<Validator />);
@@ -575,7 +585,7 @@ describe('Validator Component', () => {
       await waitFor(() => {
         const alertCall = (global.alert as jest.Mock).mock.calls[0][0];
         expect(alertCall).toMatch(/\d+\.\d+ MB/); // Should show file size
-        expect(alertCall).toContain('5 MB'); // Should show limit
+        expect(alertCall).toContain('2 MB'); // Should show limit
       });
       
       const textarea = screen.getByPlaceholderText(/Drop .json or .xml file here/i);
@@ -644,7 +654,7 @@ describe('Validator Component', () => {
       
       await waitFor(() => {
         expect(global.alert).toHaveBeenCalledWith(
-          'Failed to read from clipboard. Please check your browser permissions.'
+          expect.stringContaining('Unable to read from clipboard')
         );
       });
     });

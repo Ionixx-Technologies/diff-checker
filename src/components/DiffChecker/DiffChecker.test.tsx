@@ -67,7 +67,8 @@ describe('DiffChecker Component', () => {
     });
 
     it('should render with dark theme', () => {
-      renderWithTheme(<DiffChecker />, darkTheme);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      renderWithTheme(<DiffChecker />, darkTheme as any);
       // Theme is applied via ThemeProvider, component should render
       expect(screen.getByText('Original (Left)')).toBeInTheDocument();
     });
@@ -248,21 +249,21 @@ describe('DiffChecker Component', () => {
     it('should handle clipboard errors gracefully', async () => {
       const clipboardMock = navigator.clipboard as jest.Mocked<typeof navigator.clipboard>;
       (clipboardMock.readText as jest.Mock).mockRejectedValue(new Error('Clipboard error'));
-      
+
       // Mock alert
       const alertMock = jest.spyOn(window, 'alert').mockImplementation();
-      
+
       renderWithTheme(<DiffChecker />);
       const pasteButtons = screen.getAllByRole('button', { name: /paste/i });
-      
+
       fireEvent.click(pasteButtons[0]);
-      
+
       await waitFor(() => {
         expect(alertMock).toHaveBeenCalledWith(
-          expect.stringContaining('Failed to read from clipboard')
+          expect.stringContaining('read from clipboard')
         );
       });
-      
+
       alertMock.mockRestore();
     });
   });
@@ -355,15 +356,15 @@ describe('DiffChecker Component', () => {
       jest.restoreAllMocks();
     });
 
-    it('should reject files larger than 5 MB on drag and drop', async () => {
-      // Create a file larger than 5 MB (5 * 1024 * 1024 bytes)
-      const largeContent = 'a'.repeat(6 * 1024 * 1024); // 6 MB
+    it('should reject files larger than 2 MB on drag and drop', async () => {
+      // Create a file larger than 2 MB (2 * 1024 * 1024 bytes)
+      const largeContent = 'a'.repeat(3 * 1024 * 1024); // 3 MB
       const largeFile = new File([largeContent], 'large.txt', { type: 'text/plain' });
-      
+
       renderWithTheme(<DiffChecker />);
       const leftTextArea = screen.getAllByRole('textbox')[0];
       const dropZone = leftTextArea.parentElement;
-      
+
       if (dropZone) {
         const dropEvent = new Event('drop', { bubbles: true });
         Object.defineProperty(dropEvent, 'dataTransfer', {
@@ -371,21 +372,21 @@ describe('DiffChecker Component', () => {
             files: [largeFile],
           },
         });
-        
+
         fireEvent(dropZone, dropEvent);
-        
+
         await waitFor(() => {
           expect(global.alert).toHaveBeenCalledWith(
-            expect.stringContaining('exceeds the maximum allowed size of 5 MB')
+            expect.stringContaining('File Too Large')
           );
         });
-        
+
         // Textarea should remain empty
         expect(leftTextArea).toHaveValue('');
       }
     });
 
-    it('should accept files smaller than 5 MB', async () => {
+    it('should accept files smaller than 2 MB', async () => {
       const smallContent = 'Small file content';
       const smallFile = new File([smallContent], 'small.txt', { type: 'text/plain' });
       
@@ -433,7 +434,7 @@ describe('DiffChecker Component', () => {
         await waitFor(() => {
           const alertCall = (global.alert as jest.Mock).mock.calls[0][0];
           expect(alertCall).toMatch(/\d+\.\d+ MB/); // Should show file size
-          expect(alertCall).toContain('5 MB'); // Should show limit
+          expect(alertCall).toContain('2 MB'); // Should show limit
         });
       }
     });

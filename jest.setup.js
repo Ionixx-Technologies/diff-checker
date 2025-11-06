@@ -43,3 +43,41 @@ Object.defineProperty(navigator, 'clipboard', {
 // Mock alert
 global.alert = jest.fn();
 
+// Mock Worker for web worker tests
+global.Worker = class Worker {
+  constructor(stringUrl) {
+    this.url = stringUrl;
+    this.onmessage = null;
+  }
+
+  postMessage(msg) {
+    // Mock postMessage - do nothing in tests
+  }
+
+  terminate() {
+    // Mock terminate - do nothing in tests
+  }
+
+  addEventListener(event, handler) {
+    // Mock addEventListener
+  }
+
+  removeEventListener(event, handler) {
+    // Mock removeEventListener
+  }
+};
+
+// Mock URL constructor to avoid import.meta errors
+const OriginalURL = global.URL;
+global.URL = class URL extends OriginalURL {
+  constructor(url, base) {
+    // If base is undefined (from import.meta.url), use a fake base
+    super(url, base || 'file:///fake/base/')
+  }
+};
+
+// Mock worker factory module
+jest.mock('./src/workers/workerFactory', () => ({
+  createDiffWorker: jest.fn(() => null),
+}));
+
